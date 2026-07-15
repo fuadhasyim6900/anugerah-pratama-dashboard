@@ -28,7 +28,7 @@ function ExportNavRegistrar() {
 
 function Layout() {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       <Sidebar />
       <main className="flex-1 min-w-0">
         <Routes>

@@ -34,7 +34,7 @@ export default function ReviewDSR() {
         title="Review Kinerja DSR & Solusi Strategis"
         subtitle={`Analisis komprehensif kelemahan setiap DSR di ${filters.depo === 'ALL' ? 'seluruh depo' : `Depo ${filters.depo}`} dan rekomendasi perbaikan untuk peningkatan performa Semester 2 ${filters.tahun}.`}
       />
-      <div id="page-content" className="p-6 space-y-5">
+      <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-5">
         {insights.length === 0 && (
           <div className="card p-6 text-center text-ink-400">Tidak ada data DSR untuk filter yang dipilih.</div>
         )}
