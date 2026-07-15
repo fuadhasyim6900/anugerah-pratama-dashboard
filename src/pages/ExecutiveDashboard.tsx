@@ -1,0 +1,266 @@
+import { useMemo, useState, useEffect } from 'react';
+import { Wallet, Target, Store, Gauge, Percent } from 'lucide-react';
+import TopBar from '../components/TopBar';
+import KpiCard from '../components/KpiCard';
+import TrendBadge from '../components/TrendBadge';
+import BarChartCard from '../components/charts/BarChartCard';
+import LineChartCard from '../components/charts/LineChartCard';
+import { useSalesData } from '../hooks/useSalesData';
+import { useFilterStore } from '../store/filters';
+import {
+  applyFilters, sumNominal, distinctCount, sumTarget, groupSumBy, trendByMonth,
+  formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
+  getComparisonRows, pctChange,
+} from '../lib/aggregate';
+import { MONTH_NAMES_ID } from '../lib/types';
+
+export default function ExecutiveDashboard() {
+  const { sales, targets, loading, error } = useSalesData();
+  const filters = useFilterStore();
+
+  const filtered = useMemo(() => applyFilters(sales, filters), [sales, filters]);
+
+  const totalOmset = useMemo(() => sumNominal(filtered), [filtered]);
+  const monthsPresent = useMemo(() => distinctMonthsPresent(filtered), [filtered]);
+  const totalTarget = useMemo(
+    () => sumTarget(targets, filters.depo, monthsPresent),
+    [targets, filters.depo, monthsPresent]
+  );
+  const totalAO = useMemo(() => distinctCount(filtered, 'kdGrup'), [filtered]);
+  const avgOmsetPerAO = useMemo(() => safeAverage(totalOmset, totalAO), [totalOmset, totalAO]);
+  const pencapaian = totalTarget ? (totalOmset / totalTarget) * 100 : 0;
+
+  const omsetPerKota = useMemo(() => groupSumBy(filtered, 'kota').slice(0, 10), [filtered]);
+  const omsetPerDepo = useMemo(() => groupSumBy(filtered, 'depo'), [filtered]);
+  const trend = useMemo(() => trendByMonth(applyFilters(sales, { ...filters, bulan: 0 })), [sales, filters]);
+
+  // Target vs realisasi per month (respect depo filter, ignore month filter so the trend is visible)
+  const targetVsRealisasi = useMemo(() => {
+    const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: 0 }));
+    const monthsAvailable = new Set(monthlyActual.map((m) => m.bulan));
+    return MONTH_NAMES_ID.slice(0, 12).filter((m) => monthsAvailable.has(m)).map((bulanLabel) => {
+      const monthNum = MONTH_NAMES_ID.indexOf(bulanLabel) + 1;
+      const realisasi = monthlyActual.find((m) => m.bulan === bulanLabel)?.nominal || 0;
+      const target = sumTarget(targets, filters.depo, [monthNum]);
+      return { bulan: bulanLabel, Realisasi: realisasi, Target: target };
+    });
+  }, [sales, targets, filters]);
+
+  // KPI trend badges: YTD compares vs same months last year, specific-month compares vs previous month
+  const { rows: prevRows, label: comparisonLabel } = useMemo(
+    () => getComparisonRows(sales, filtered, filters),
+    [sales, filtered, filters]
+  );
+  const prevOmset = useMemo(() => sumNominal(prevRows), [prevRows]);
+  const prevAO = useMemo(() => distinctCount(prevRows, 'kdGrup'), [prevRows]);
+  const prevAvgOmsetPerAO = useMemo(() => safeAverage(prevOmset, prevAO), [prevOmset, prevAO]);
+
+  // Separate two-year picker for the monthly comparison table below
+  const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+  const [tahunA, setTahunA] = useState<number | null>(null);
+  const [tahunB, setTahunB] = useState<number | null>(null);
+  useEffect(() => {
+    if (availableYears.length >= 2 && (tahunA === null || tahunB === null)) {
+      setTahunA(availableYears[availableYears.length - 2]);
+      setTahunB(availableYears[availableYears.length - 1]);
+    } else if (availableYears.length === 1 && tahunB === null) {
+      setTahunA(availableYears[0]);
+      setTahunB(availableYears[0]);
+    }
+  }, [availableYears, tahunA, tahunB]);
+
+  const monthlyComparison = useMemo(() => {
+    if (tahunA === null || tahunB === null) return [];
+    const rowsA = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunA });
+    const rowsB = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunB });
+    return MONTH_NAMES_ID.map((label, idx) => {
+      const monthNum = idx + 1;
+      const aRows = rowsA.filter((r) => r.monthNum === monthNum);
+      const bRows = rowsB.filter((r) => r.monthNum === monthNum);
+      const salesA = sumNominal(aRows);
+      const salesB = sumNominal(bRows);
+      const aoA = distinctCount(aRows, 'kdGrup');
+      const aoB = distinctCount(bRows, 'kdGrup');
+      return {
+        bulan: label,
+        salesA, salesB,
+        salesGrowth: pctChange(salesB, salesA),
+        aoA, aoB,
+        aoGrowth: pctChange(aoB, aoA),
+      };
+    });
+  }, [sales, filters.depo, tahunA, tahunB]);
+
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} />;
+
+  return (
+    <div>
+      <TopBar
+        title="Dashboard Kinerja Penjualan & Active Outlet (AO)"
+        subtitle={`${filters.depo === 'ALL' ? 'Semua Depo' : filters.depo} · ${filters.bulan === 0 ? 'Semua Bulan (YTD)' : MONTH_NAMES_ID[filters.bulan - 1]} ${filters.tahun}`}
+      />
+      <div id="page-content" className="p-6 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+          <KpiCard
+            label="Total Omset" value={formatRupiah(totalOmset)} icon={Wallet}
+            footer={
+              <TrendBadge
+                pct={pctChange(totalOmset, prevOmset)}
+                label={comparisonLabel}
+                previousValue={prevOmset ? formatRupiah(prevOmset) : undefined}
+              />
+            }
+          />
+          <KpiCard label="Target Omset" value={formatRupiah(totalTarget)} icon={Target} />
+          <KpiCard
+            label="Total Active Outlet" value={`${formatNumber(totalAO)} Outlet`} icon={Store}
+            footer={<TrendBadge pct={pctChange(totalAO, prevAO)} label={comparisonLabel} />}
+          />
+          <KpiCard
+            label="Rata-rata Omset / AO" value={formatRupiah(avgOmsetPerAO)} icon={Gauge}
+            footer={<TrendBadge pct={pctChange(avgOmsetPerAO, prevAvgOmsetPerAO)} label={comparisonLabel} />}
+          />
+          <KpiCard
+            label="Persentase Pencapaian"
+            value={`${pencapaian.toFixed(1)}%`}
+            icon={Percent}
+            accent={pencapaian >= 100 ? 'brand' : 'ink'}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="card p-5">
+            <h3 className="font-bold text-sm mb-1">Target vs Realisasi</h3>
+            <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
+            <BarChartCard
+              data={targetVsRealisasi}
+              xKey="bulan"
+              series={[
+                { key: 'Target', color: '#d9d9de', name: 'Target' },
+                { key: 'Realisasi', color: '#dc2626', name: 'Realisasi' },
+              ]}
+            />
+          </div>
+
+          <div className="card p-5">
+            <h3 className="font-bold text-sm mb-1">Tren Omset Bulanan</h3>
+            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {filters.tahun}</p>
+            <LineChartCard
+              data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
+              xKey="bulan"
+              series={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
+            />
+          </div>
+
+          <div className="card p-5">
+            <h3 className="font-bold text-sm mb-1">Omset per Kota</h3>
+            <p className="text-xs text-ink-400 mb-3">10 kota dengan kontribusi penjualan tertinggi</p>
+            <BarChartCard
+              data={omsetPerKota.map((k) => ({ label: k.label, Omset: k.value }))}
+              xKey="label"
+              horizontal
+              series={[{ key: 'Omset', color: '#ef4444', name: 'Omset' }]}
+              height={320}
+            />
+          </div>
+
+          <div className="card p-5">
+            <h3 className="font-bold text-sm mb-1">Omset per Depo</h3>
+            <p className="text-xs text-ink-400 mb-3">Distribusi penjualan di setiap depo</p>
+            <BarChartCard
+              data={omsetPerDepo.map((k) => ({ label: k.label, Omset: k.value }))}
+              xKey="label"
+              horizontal
+              series={[{ key: 'Omset', color: '#b91c1c', name: 'Omset' }]}
+              height={320}
+            />
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
+            <div>
+              <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
+              <p className="text-xs text-ink-400">Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo !== 'ALL' ? ` · Depo ${filters.depo}` : ''}</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <label className="flex items-center gap-1.5">
+                Tahun A
+                <select
+                  value={tahunA ?? ''}
+                  onChange={(e) => setTahunA(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5">
+                Tahun B
+                <select
+                  value={tahunB ?? ''}
+                  onChange={(e) => setTahunB(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Bulan</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {tahunA ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {tahunB ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
+                  <th className="py-2 pr-3 text-right">AO {tahunA ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">AO {tahunB ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyComparison.map((m) => (
+                  <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function LoadingState() {
+  return (
+    <div className="flex items-center justify-center h-[70vh] text-sm text-ink-400 font-medium">
+      Memuat data dari repository...
+    </div>
+  );
+}
+
+export function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center h-[70vh]">
+      <div className="card p-6 max-w-md text-center">
+        <p className="font-bold text-brand-600 mb-2">Gagal memuat data</p>
+        <p className="text-sm text-ink-500">{message}</p>
+      </div>
+    </div>
+  );
+}
