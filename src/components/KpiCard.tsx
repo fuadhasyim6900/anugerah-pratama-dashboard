@@ -25,7 +25,7 @@ export default function KpiCard({
           </span>
         )}
       </div>
-      <div className="text-2xl font-extrabold tracking-tight break-words">{value}</div>
+      <div className="text-lg sm:text-xl xl:text-2xl font-extrabold tracking-tight leading-snug [overflow-wrap:normal] whitespace-normal">{value}</div>
       {sub && <div className="text-xs text-ink-400 font-medium">{sub}</div>}
       {footer}
     </div>

@@ -101,7 +101,7 @@ export default function ExecutiveDashboard() {
         subtitle={`${filters.depo === 'ALL' ? 'Semua Depo' : filters.depo} · ${filters.bulan === 0 ? 'Semua Bulan (YTD)' : MONTH_NAMES_ID[filters.bulan - 1]} ${filters.tahun}`}
       />
       <div id="page-content" className="p-6 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]">
           <KpiCard
             label="Total Omset" value={formatRupiah(totalOmset)} icon={Wallet}
             footer={
