@@ -58,18 +58,24 @@ export function distinctCount(rows: SalesRow[], key: keyof SalesRow): number {
   return new Set(rows.map((r) => r[key])).size;
 }
 
-// Sum target nominal for the given depo, restricted to a specific set of months
-// (1-12). Pass the months that are actually present in the comparable actual
-// data so target and realisasi always cover the same period.
-export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[]): number {
+// Sum target nominal for the given depo + year(s), restricted to a specific set
+// of months (1-12). Pass the months/years that are actually present in the
+// comparable actual data so target and realisasi always cover the same period.
+// Year-aware because the target sheet now stacks multiple years (TAHUN column)
+// in one file — without this, totals would double/triple count past years.
+export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[], tahunNums: number[]): number {
   const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
   return targets
-    .filter((t) => depo.length === 0 || depo.includes(t.depo))
+    .filter((t) => (depo.length === 0 || depo.includes(t.depo)) && (tahunNums.length === 0 || tahunNums.includes(t.tahun)))
     .reduce((acc, t) => acc + idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0), 0);
 }
 
 export function distinctMonthsPresent(rows: SalesRow[]): number[] {
   return Array.from(new Set(rows.map((r) => r.monthNum))).filter((m) => m >= 1 && m <= 12).sort((a, b) => a - b);
+}
+
+export function distinctYearsPresent(rows: SalesRow[]): number[] {
+  return Array.from(new Set(rows.map((r) => r.tahun))).filter(Boolean).sort((a, b) => a - b);
 }
 
 export function groupSumBy(rows: SalesRow[], key: keyof SalesRow): { label: string; value: number }[] {
@@ -180,4 +186,55 @@ export function supplierBreakdownForDSR(rows: SalesRow[], dsr: string) {
 export function pctChange(current: number, previous: number): number | null {
   if (!previous) return null;
   return ((current - previous) / previous) * 100;
+}
+
+export interface TargetVsOmsetSupplierRow {
+  supplier: string;
+  target: number;
+  omset: number;
+  kekurangan: number; // target - omset (positive = shortfall, negative = target exceeded)
+  pctKekurangan: number | null; // (kekurangan / target) * 100, null when target is 0
+}
+
+// Target vs realisasi omset per supplier, scoped to one/several DSR (or all DSR
+// when dsrNames is empty). `scopedSalesRows` should already be filtered to the
+// desired DSR(s) + depo/bulan/tahun scope so the omset side lines up with the
+// target side (which applies the same depo/tahun/DSR filters internally).
+export function targetVsOmsetPerSupplier(
+  targets: TargetRow[],
+  scopedSalesRows: SalesRow[],
+  monthNums: number[],
+  tahunNums: number[],
+  depo: string[],
+  dsrNames: string[], // empty = semua DSR
+): TargetVsOmsetSupplierRow[] {
+  const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
+  const dsrKeySet = new Set(dsrNames.map((d) => d.trim().toUpperCase()));
+
+  const targetMap = new Map<string, number>();
+  for (const t of targets) {
+    if (dsrKeySet.size && !dsrKeySet.has(t.namaSalesman.trim().toUpperCase())) continue;
+    if (depo.length && !depo.includes(t.depo)) continue;
+    if (tahunNums.length && !tahunNums.includes(t.tahun)) continue;
+    const supplierKey = t.supplier.trim().toUpperCase();
+    if (!supplierKey) continue;
+    const sum = idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0);
+    targetMap.set(supplierKey, (targetMap.get(supplierKey) || 0) + sum);
+  }
+
+  const omsetMap = new Map<string, number>();
+  for (const r of scopedSalesRows) {
+    const supplierKey = r.supp.trim().toUpperCase();
+    if (!supplierKey) continue;
+    omsetMap.set(supplierKey, (omsetMap.get(supplierKey) || 0) + r.nominal);
+  }
+
+  const allSuppliers = new Set([...targetMap.keys(), ...omsetMap.keys()]);
+  return Array.from(allSuppliers).map((supplier) => {
+    const target = targetMap.get(supplier) || 0;
+    const omset = omsetMap.get(supplier) || 0;
+    const kekurangan = target - omset;
+    const pctKekurangan = target ? (kekurangan / target) * 100 : null;
+    return { supplier, target, omset, kekurangan, pctKekurangan };
+  }).sort((a, b) => b.target - a.target || b.omset - a.omset);
 }

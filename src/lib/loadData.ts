@@ -77,10 +77,9 @@ export async function loadTargetData(): Promise<TargetRow[]> {
     const r = normalizeRow(raw);
     return {
       namaSalesman: String(r['NAMA SALESMAN'] ?? '').trim(),
-      divisi: String(r['DIVISI'] ?? '').trim(),
-      salesYgCover: String(r['SALES YG COVER'] ?? '').trim(),
       depo: String(r['DEPO'] ?? '').trim().toUpperCase(),
-      supplier: String(r['SUPPLIER'] ?? '').trim(),
+      supplier: String(r['SUPPLIER'] ?? '').trim().toUpperCase(),
+      tahun: r['TAHUN'] ? Number(r['TAHUN']) : new Date().getFullYear(),
       monthly: monthCols.map((c) => toNumber(r[c])),
     };
   }).filter((r) => r.namaSalesman);

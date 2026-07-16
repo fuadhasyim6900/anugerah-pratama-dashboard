@@ -13,10 +13,9 @@ export interface SalesRow {
 
 export interface TargetRow {
   namaSalesman: string;
-  divisi: string;
-  salesYgCover: string;
   depo: string;
   supplier: string;
+  tahun: number;
   monthly: number[]; // index 0 = Jan ... 11 = Dec
 }
 

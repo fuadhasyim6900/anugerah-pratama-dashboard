@@ -8,7 +8,7 @@ import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
   applyFilters, sumNominal, distinctCount, sumTarget, groupSumBy, trendByMonth,
-  formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
+  formatRupiah, formatNumber, safeAverage, distinctMonthsPresent, distinctYearsPresent,
   pctChange, depoLabel, bulanLabel, tahunLabel,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID } from '../lib/types';
@@ -21,9 +21,10 @@ export default function ExecutiveDashboard() {
 
   const totalOmset = useMemo(() => sumNominal(filtered), [filtered]);
   const monthsPresent = useMemo(() => distinctMonthsPresent(filtered), [filtered]);
+  const yearsPresent = useMemo(() => distinctYearsPresent(filtered), [filtered]);
   const totalTarget = useMemo(
-    () => sumTarget(targets, filters.depo, monthsPresent),
-    [targets, filters.depo, monthsPresent]
+    () => sumTarget(targets, filters.depo, monthsPresent, yearsPresent),
+    [targets, filters.depo, monthsPresent, yearsPresent]
   );
   const totalAO = useMemo(() => distinctCount(filtered, 'kdGrup'), [filtered]);
   const avgOmsetPerAO = useMemo(() => safeAverage(totalOmset, totalAO), [totalOmset, totalAO]);
@@ -37,12 +38,14 @@ export default function ExecutiveDashboard() {
 
   // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is visible)
   const targetVsRealisasi = useMemo(() => {
-    const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: [] }));
+    const trendRows = applyFilters(sales, { ...filters, bulan: [] });
+    const monthlyActual = trendByMonth(trendRows);
+    const yearsForTrend = distinctYearsPresent(trendRows);
     const monthsAvailable = new Set(monthlyActual.map((m) => m.bulan));
     return MONTH_NAMES_ID.slice(0, 12).filter((m) => monthsAvailable.has(m)).map((bulanLbl) => {
       const monthNum = MONTH_NAMES_ID.indexOf(bulanLbl) + 1;
       const realisasi = monthlyActual.find((m) => m.bulan === bulanLbl)?.nominal || 0;
-      const target = sumTarget(targets, filters.depo, [monthNum]);
+      const target = sumTarget(targets, filters.depo, [monthNum], yearsForTrend);
       return { bulan: bulanLbl, Realisasi: realisasi, Target: target };
     });
   }, [sales, targets, filters]);
