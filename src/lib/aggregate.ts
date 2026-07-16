@@ -2,9 +2,9 @@ import type { SalesRow, TargetRow } from './types';
 import { MONTH_NAMES_ID } from './types';
 
 export interface Filters {
-  depo: string; // 'ALL' or depo name
-  bulan: number; // 0 = all months, 1-12 specific
-  tahun: number; // year
+  depo: string[];  // empty = semua depo
+  bulan: number[]; // empty = semua bulan (1-12 each)
+  tahun: number[]; // empty = semua tahun
 }
 
 export const DEPO_LIST_EXCLUDING_ADMIN = (rows: SalesRow[]): string[] => {
@@ -14,11 +14,40 @@ export const DEPO_LIST_EXCLUDING_ADMIN = (rows: SalesRow[]): string[] => {
 
 export function applyFilters(rows: SalesRow[], f: Filters): SalesRow[] {
   return rows.filter((r) => {
-    if (f.tahun && r.tahun !== f.tahun) return false;
-    if (f.depo !== 'ALL' && r.depo !== f.depo) return false;
-    if (f.bulan !== 0 && r.monthNum !== f.bulan) return false;
+    if (f.tahun.length && !f.tahun.includes(r.tahun)) return false;
+    if (f.depo.length && !f.depo.includes(r.depo)) return false;
+    if (f.bulan.length && !f.bulan.includes(r.monthNum)) return false;
     return true;
   });
+}
+
+// Human-readable summaries of the current multi-select filters, used in page
+// subtitles so it reads well whether 0, 1, or several values are picked.
+export function depoLabel(depo: string[]): string {
+  if (depo.length === 0) return 'Semua Depo';
+  if (depo.length === 1) return depo[0];
+  return `${depo.length} Depo Dipilih`;
+}
+
+export function bulanLabel(bulan: number[]): string {
+  if (bulan.length === 0) return 'Semua Bulan (YTD)';
+  const sorted = [...bulan].sort((a, b) => a - b);
+  return sorted.map((m) => MONTH_NAMES_ID[m - 1]).join(', ');
+}
+
+export function tahunLabel(tahun: number[]): string {
+  if (tahun.length === 0) return 'Semua Tahun';
+  return [...tahun].sort((a, b) => a - b).join(', ');
+}
+
+// A single reference year for pages that need "the current year" (e.g.
+// projections comparing against year-1 / year-2) even though the year
+// filter itself now supports picking several years at once. Uses the most
+// recent selected year, or the most recent year in the data if none picked.
+export function primaryYear(tahun: number[], availableYears: number[]): number {
+  if (tahun.length) return Math.max(...tahun);
+  if (availableYears.length) return Math.max(...availableYears);
+  return new Date().getFullYear();
 }
 
 export function sumNominal(rows: SalesRow[]): number {
@@ -32,10 +61,10 @@ export function distinctCount(rows: SalesRow[], key: keyof SalesRow): number {
 // Sum target nominal for the given depo, restricted to a specific set of months
 // (1-12). Pass the months that are actually present in the comparable actual
 // data so target and realisasi always cover the same period.
-export function sumTarget(targets: TargetRow[], depo: string, monthNums: number[]): number {
+export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[]): number {
   const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
   return targets
-    .filter((t) => depo === 'ALL' || t.depo === depo)
+    .filter((t) => depo.length === 0 || depo.includes(t.depo))
     .reduce((acc, t) => acc + idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0), 0);
 }
 
@@ -146,37 +175,6 @@ export function supplierBreakdownForDSR(rows: SalesRow[], dsr: string) {
     porsi: total ? (g.value / total) * 100 : 0,
     avgAo: Math.round((aoBySupplier.get(g.label)?.size || 0) / monthsPresent),
   }));
-}
-
-// --- Period-over-period comparison for KPI trend badges -------------------
-
-export interface PeriodComparison {
-  type: 'year' | 'month';
-  label: string; // e.g. "vs Tahun 2025" or "vs Bulan Jun 2026"
-  currentValue: number;
-  previousValue: number;
-  pctChange: number | null; // null when previous period has no data to compare against
-}
-
-/**
- * Builds the comparable "previous period" rows for a KPI trend badge.
- * - If no specific month is selected (YTD view), compares against the SAME
- *   set of months in the previous year, so a partial current year is compared fairly.
- * - If a specific month is selected, compares against the previous month
- *   (wrapping to December of the previous year when January is selected).
- */
-export function getComparisonRows(allRows: SalesRow[], currentFiltered: SalesRow[], f: Filters) {
-  if (f.bulan === 0) {
-    const monthsPresent = distinctMonthsPresent(currentFiltered);
-    const prevYear = f.tahun - 1;
-    const prevRows = applyFilters(allRows, { depo: f.depo, bulan: 0, tahun: prevYear })
-      .filter((r) => monthsPresent.includes(r.monthNum));
-    return { rows: prevRows, label: `vs Tahun ${prevYear} (periode sama)` };
-  }
-  const prevMonth = f.bulan === 1 ? 12 : f.bulan - 1;
-  const prevYear = f.bulan === 1 ? f.tahun - 1 : f.tahun;
-  const prevRows = applyFilters(allRows, { depo: f.depo, bulan: prevMonth, tahun: prevYear });
-  return { rows: prevRows, label: `vs ${MONTH_NAMES_ID[prevMonth - 1]} ${prevYear}` };
 }
 
 export function pctChange(current: number, previous: number): number | null {

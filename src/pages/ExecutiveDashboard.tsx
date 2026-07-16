@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { Wallet, Target, Store, Gauge, Percent } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
-import TrendBadge from '../components/TrendBadge';
 import BarChartCard from '../components/charts/BarChartCard';
 import LineChartCard from '../components/charts/LineChartCard';
 import { useSalesData } from '../hooks/useSalesData';
@@ -10,7 +9,7 @@ import { useFilterStore } from '../store/filters';
 import {
   applyFilters, sumNominal, distinctCount, sumTarget, groupSumBy, trendByMonth,
   formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
-  getComparisonRows, pctChange,
+  pctChange, depoLabel, bulanLabel, tahunLabel,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID } from '../lib/types';
 
@@ -32,28 +31,21 @@ export default function ExecutiveDashboard() {
 
   const omsetPerKota = useMemo(() => groupSumBy(filtered, 'kota').slice(0, 10), [filtered]);
   const omsetPerDepo = useMemo(() => groupSumBy(filtered, 'depo'), [filtered]);
-  const trend = useMemo(() => trendByMonth(applyFilters(sales, { ...filters, bulan: 0 })), [sales, filters]);
+  // The monthly trend chart always shows every available month regardless of
+  // the Bulan filter, so ignore it here (but keep Depo/Tahun in effect).
+  const trend = useMemo(() => trendByMonth(applyFilters(sales, { ...filters, bulan: [] })), [sales, filters]);
 
-  // Target vs realisasi per month (respect depo filter, ignore month filter so the trend is visible)
+  // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is visible)
   const targetVsRealisasi = useMemo(() => {
-    const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: 0 }));
+    const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: [] }));
     const monthsAvailable = new Set(monthlyActual.map((m) => m.bulan));
-    return MONTH_NAMES_ID.slice(0, 12).filter((m) => monthsAvailable.has(m)).map((bulanLabel) => {
-      const monthNum = MONTH_NAMES_ID.indexOf(bulanLabel) + 1;
-      const realisasi = monthlyActual.find((m) => m.bulan === bulanLabel)?.nominal || 0;
+    return MONTH_NAMES_ID.slice(0, 12).filter((m) => monthsAvailable.has(m)).map((bulanLbl) => {
+      const monthNum = MONTH_NAMES_ID.indexOf(bulanLbl) + 1;
+      const realisasi = monthlyActual.find((m) => m.bulan === bulanLbl)?.nominal || 0;
       const target = sumTarget(targets, filters.depo, [monthNum]);
-      return { bulan: bulanLabel, Realisasi: realisasi, Target: target };
+      return { bulan: bulanLbl, Realisasi: realisasi, Target: target };
     });
   }, [sales, targets, filters]);
-
-  // KPI trend badges: YTD compares vs same months last year, specific-month compares vs previous month
-  const { rows: prevRows, label: comparisonLabel } = useMemo(
-    () => getComparisonRows(sales, filtered, filters),
-    [sales, filtered, filters]
-  );
-  const prevOmset = useMemo(() => sumNominal(prevRows), [prevRows]);
-  const prevAO = useMemo(() => distinctCount(prevRows, 'kdGrup'), [prevRows]);
-  const prevAvgOmsetPerAO = useMemo(() => safeAverage(prevOmset, prevAO), [prevOmset, prevAO]);
 
   // Separate two-year picker for the monthly comparison table below
   const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
@@ -69,15 +61,21 @@ export default function ExecutiveDashboard() {
     }
   }, [availableYears, tahunA, tahunB]);
 
+  // The main Bulan filter restricts which months this table shows (empty = all 12).
+  const monthsToShow = useMemo(
+    () => (filters.bulan.length ? [...filters.bulan].sort((a, b) => a - b) : Array.from({ length: 12 }, (_, i) => i + 1)),
+    [filters.bulan]
+  );
+
   const monthlyComparison = useMemo(() => {
     if (tahunA === null || tahunB === null) return { rows: [], grandTotal: null as null | {
       salesA: number; salesB: number; salesGrowth: number | null;
       aoA: number; aoB: number; aoGrowth: number | null;
     } };
-    const rowsA = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunA });
-    const rowsB = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunB });
-    const rows = MONTH_NAMES_ID.map((label, idx) => {
-      const monthNum = idx + 1;
+    const rowsA = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [tahunA] });
+    const rowsB = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [tahunB] });
+    const rows = monthsToShow.map((monthNum) => {
+      const label = MONTH_NAMES_ID[monthNum - 1];
       const aRows = rowsA.filter((r) => r.monthNum === monthNum);
       const bRows = rowsB.filter((r) => r.monthNum === monthNum);
       const salesA = sumNominal(aRows);
@@ -93,13 +91,16 @@ export default function ExecutiveDashboard() {
       };
     });
 
-    const grandSalesA = sumNominal(rowsA);
-    const grandSalesB = sumNominal(rowsB);
-    // Grand-total AO is the count of *distinct* outlets across the whole year
-    // (not the sum of each month's AO), otherwise an outlet active in several
-    // months would be counted multiple times and inflate the total.
-    const grandAoA = distinctCount(rowsA, 'kdGrup');
-    const grandAoB = distinctCount(rowsB, 'kdGrup');
+    // Grand total only covers the months currently shown (respecting the
+    // Bulan filter), and AO is a distinct count across that scope rather
+    // than a sum of monthly AO (which would double-count outlets active in
+    // more than one month).
+    const rowsAInScope = rowsA.filter((r) => monthsToShow.includes(r.monthNum));
+    const rowsBInScope = rowsB.filter((r) => monthsToShow.includes(r.monthNum));
+    const grandSalesA = sumNominal(rowsAInScope);
+    const grandSalesB = sumNominal(rowsBInScope);
+    const grandAoA = distinctCount(rowsAInScope, 'kdGrup');
+    const grandAoB = distinctCount(rowsBInScope, 'kdGrup');
 
     return {
       rows,
@@ -110,7 +111,7 @@ export default function ExecutiveDashboard() {
         aoGrowth: pctChange(grandAoB, grandAoA),
       },
     };
-  }, [sales, filters.depo, tahunA, tahunB]);
+  }, [sales, filters.depo, monthsToShow, tahunA, tahunB]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -119,29 +120,14 @@ export default function ExecutiveDashboard() {
     <div>
       <TopBar
         title="Dashboard Kinerja Penjualan & Active Outlet (AO)"
-        subtitle={`${filters.depo === 'ALL' ? 'Semua Depo' : filters.depo} · ${filters.bulan === 0 ? 'Semua Bulan (YTD)' : MONTH_NAMES_ID[filters.bulan - 1]} ${filters.tahun}`}
+        subtitle={`${depoLabel(filters.depo)} · ${bulanLabel(filters.bulan)} ${tahunLabel(filters.tahun)}`}
       />
       <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]">
-          <KpiCard
-            label="Total Omset" value={formatRupiah(totalOmset)} icon={Wallet}
-            footer={
-              <TrendBadge
-                pct={pctChange(totalOmset, prevOmset)}
-                label={comparisonLabel}
-                previousValue={prevOmset ? formatRupiah(prevOmset) : undefined}
-              />
-            }
-          />
+          <KpiCard label="Total Omset" value={formatRupiah(totalOmset)} icon={Wallet} />
           <KpiCard label="Target Omset" value={formatRupiah(totalTarget)} icon={Target} />
-          <KpiCard
-            label="Total Active Outlet" value={`${formatNumber(totalAO)} Outlet`} icon={Store}
-            footer={<TrendBadge pct={pctChange(totalAO, prevAO)} label={comparisonLabel} />}
-          />
-          <KpiCard
-            label="Rata-rata Omset / AO" value={formatRupiah(avgOmsetPerAO)} icon={Gauge}
-            footer={<TrendBadge pct={pctChange(avgOmsetPerAO, prevAvgOmsetPerAO)} label={comparisonLabel} />}
-          />
+          <KpiCard label="Total Active Outlet" value={`${formatNumber(totalAO)} Outlet`} icon={Store} />
+          <KpiCard label="Rata-rata Omset / AO" value={formatRupiah(avgOmsetPerAO)} icon={Gauge} />
           <KpiCard
             label="Persentase Pencapaian"
             value={`${pencapaian.toFixed(1)}%`}
@@ -166,7 +152,7 @@ export default function ExecutiveDashboard() {
 
           <div className="card p-5">
             <h3 className="font-bold text-sm mb-1">Tren Omset Bulanan</h3>
-            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {filters.tahun}</p>
+            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {tahunLabel(filters.tahun)}</p>
             <LineChartCard
               data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
               xKey="bulan"
@@ -203,7 +189,9 @@ export default function ExecutiveDashboard() {
           <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
             <div>
               <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
-              <p className="text-xs text-ink-400">Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo !== 'ALL' ? ` · Depo ${filters.depo}` : ''}</p>
+              <p className="text-xs text-ink-400">
+                Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)}
+              </p>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold">
               <label className="flex items-center gap-1.5">

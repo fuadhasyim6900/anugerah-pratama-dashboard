@@ -3,44 +3,58 @@ import TopBar from '../components/TopBar';
 import LineChartCard from '../components/charts/LineChartCard';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
-import { applyFilters, formatRupiah } from '../lib/aggregate';
+import { applyFilters, formatRupiah, depoLabel, primaryYear } from '../lib/aggregate';
 import { MONTH_NAMES_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 
 type Scenario = 'historis' | 'flat' | 'target5' | 'target10' | 'custom';
-type Semester = 1 | 2;
+type PeriodId = 'S1' | 'S2' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
+
+const PERIOD_DEFS: Record<PeriodId, { label: string; months: number[] }> = {
+  S1: { label: 'Semester 1', months: [1, 2, 3, 4, 5, 6] },
+  S2: { label: 'Semester 2', months: [7, 8, 9, 10, 11, 12] },
+  Q1: { label: 'Kuartal 1', months: [1, 2, 3] },
+  Q2: { label: 'Kuartal 2', months: [4, 5, 6] },
+  Q3: { label: 'Kuartal 3', months: [7, 8, 9] },
+  Q4: { label: 'Kuartal 4', months: [10, 11, 12] },
+};
 
 export default function ProyeksiS2() {
   const { sales, loading, error } = useSalesData();
   const filters = useFilterStore();
-  const [semester, setSemester] = useState<Semester>(2);
+  const [period, setPeriod] = useState<PeriodId>('S2');
   const [scenario, setScenario] = useState<Scenario>('historis');
   const [customGrowth, setCustomGrowth] = useState(0);
 
-  const monthRange = semester === 1 ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12];
-  const semesterLabel = semester === 1 ? 'Semester 1' : 'Semester 2';
+  const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+  // Multiple years can be selected in the sidebar; projections need one
+  // reference year, so use the most recently selected one (or the latest
+  // year in the data if none is selected).
+  const currentYear = useMemo(() => primaryYear(filters.tahun, availableYears), [filters.tahun, availableYears]);
+
+  const monthRange = PERIOD_DEFS[period].months;
+  const periodLabel = PERIOD_DEFS[period].label;
 
   const depoFiltered = useMemo(
-    () => sales.filter((r) => filters.depo === 'ALL' || r.depo === filters.depo),
+    () => sales.filter((r) => filters.depo.length === 0 || filters.depo.includes(r.depo)),
     [sales, filters.depo]
   );
 
   function monthlyTotalsFor(year: number) {
-    const rows = applyFilters(depoFiltered, { depo: 'ALL', bulan: 0, tahun: year })
+    const rows = applyFilters(depoFiltered, { depo: [], bulan: [], tahun: [year] })
       .filter((r) => monthRange.includes(r.monthNum));
     const map = new Map<number, number>();
     for (const r of rows) map.set(r.monthNum, (map.get(r.monthNum) || 0) + r.nominal);
     return monthRange.map((m) => map.get(m) || 0);
   }
 
-  // Baseline: actual figures for the same semester one year before the target year.
-  const baselineMonthly = useMemo(() => monthlyTotalsFor(filters.tahun - 1), [depoFiltered, filters.tahun, semester]);
+  // Baseline: actual figures for the same period one year before the target year.
+  const baselineMonthly = useMemo(() => monthlyTotalsFor(currentYear - 1), [depoFiltered, currentYear, period]);
   const baselineTotal = baselineMonthly.reduce((a, b) => a + b, 0);
 
-  // Historical growth trend: how that same semester grew year-over-year the last time
-  // both years were fully known (year-2 -> year-1). Works the same whether we're
-  // projecting Semester 1 or Semester 2.
-  const priorMonthly = useMemo(() => monthlyTotalsFor(filters.tahun - 2), [depoFiltered, filters.tahun, semester]);
+  // Historical growth trend: how that same period grew year-over-year the last time
+  // both years were fully known (year-2 -> year-1). Works for any semester/quarter.
+  const priorMonthly = useMemo(() => monthlyTotalsFor(currentYear - 2), [depoFiltered, currentYear, period]);
   const priorTotal = priorMonthly.reduce((a, b) => a + b, 0);
   const historicalGrowthPct = priorTotal ? ((baselineTotal - priorTotal) / priorTotal) * 100 : 0;
 
@@ -60,8 +74,8 @@ export default function ProyeksiS2() {
 
   const chartData = monthRange.map((m, i) => ({
     bulan: MONTH_NAMES_ID[m - 1],
-    [`Realisasi ${filters.tahun - 1}`]: baselineMonthly[i],
-    [`Proyeksi ${filters.tahun}`]: Math.round(projectedMonthly[i]),
+    [`Realisasi ${currentYear - 1}`]: baselineMonthly[i],
+    [`Proyeksi ${currentYear}`]: Math.round(projectedMonthly[i]),
   }));
 
   const SCENARIOS: { id: Scenario; label: string }[] = [
@@ -76,28 +90,51 @@ export default function ProyeksiS2() {
 
   return (
     <div>
-      <TopBar title={`Proyeksi ${semesterLabel} ${filters.tahun}`} subtitle={filters.depo === 'ALL' ? 'Semua Depo' : filters.depo} />
+      <TopBar title={`Proyeksi ${periodLabel} ${currentYear}`} subtitle={depoLabel(filters.depo)} />
       <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div className="card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
-              <h3 className="font-bold text-sm mb-1">Pengaturan Proyeksi {semesterLabel} ({filters.tahun})</h3>
+              <h3 className="font-bold text-sm mb-1">Pengaturan Proyeksi {periodLabel} ({currentYear})</h3>
               <p className="text-xs text-ink-400">Pilih skenario atau atur target pertumbuhan penjualan secara kustom.</p>
             </div>
-            <div className="flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden shrink-0">
-              {([1, 2] as Semester[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSemester(s)}
-                  className={`px-4 py-2 text-xs font-bold transition-colors ${
-                    semester === s
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-white dark:bg-ink-900 text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-800'
-                  }`}
-                >
-                  Semester {s}
-                </button>
-              ))}
+            <div className="flex flex-col gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wide w-14 shrink-0">Semester</span>
+                <div className="flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden">
+                  {(['S1', 'S2'] as PeriodId[]).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriod(p)}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${
+                        period === p
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-white dark:bg-ink-900 text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-800'
+                      }`}
+                    >
+                      {PERIOD_DEFS[p].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wide w-14 shrink-0">Kuartal</span>
+                <div className="flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden">
+                  {(['Q1', 'Q2', 'Q3', 'Q4'] as PeriodId[]).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriod(p)}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${
+                        period === p
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-white dark:bg-ink-900 text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-800'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -136,11 +173,11 @@ export default function ProyeksiS2() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-4">
-              <p className="text-xs font-semibold text-ink-400 mb-1">Realisasi {semesterLabel} {filters.tahun - 1}</p>
+              <p className="text-xs font-semibold text-ink-400 mb-1">Realisasi {periodLabel} {currentYear - 1}</p>
               <p className="text-lg font-extrabold">{formatRupiah(baselineTotal)}</p>
             </div>
             <div className="rounded-lg bg-brand-50 dark:bg-brand-900/20 p-4">
-              <p className="text-xs font-semibold text-brand-600 mb-1">Proyeksi {semesterLabel} {filters.tahun}</p>
+              <p className="text-xs font-semibold text-brand-600 mb-1">Proyeksi {periodLabel} {currentYear}</p>
               <p className="text-lg font-extrabold text-brand-700 dark:text-brand-400">{formatRupiah(projectedTotal)}</p>
             </div>
             <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-4">
@@ -152,28 +189,28 @@ export default function ProyeksiS2() {
           </div>
           {baselineTotal === 0 && (
             <p className="text-xs text-ink-400 mt-3">
-              * Data realisasi {semesterLabel} {filters.tahun - 1} belum tersedia di file data omset untuk filter yang dipilih.
+              * Data realisasi {periodLabel} {currentYear - 1} belum tersedia di file data omset untuk filter yang dipilih.
             </p>
           )}
         </div>
 
         <div className="card p-5">
-          <h3 className="font-bold text-sm mb-1">Grafik Tren Penjualan {semesterLabel} ({filters.tahun - 1} vs {filters.tahun} Proyeksi)</h3>
+          <h3 className="font-bold text-sm mb-1">Grafik Tren Penjualan {periodLabel} ({currentYear - 1} vs {currentYear} Proyeksi)</h3>
           <p className="text-xs text-ink-400 mb-3">
-            Membandingkan realisasi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {filters.tahun - 1} dengan proyeksi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {filters.tahun}
+            Membandingkan realisasi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {currentYear - 1} dengan proyeksi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {currentYear}
           </p>
           <LineChartCard
             data={chartData}
             xKey="bulan"
             series={[
-              { key: `Realisasi ${filters.tahun - 1}`, color: '#b5b5bd', name: `Realisasi ${filters.tahun - 1}` },
-              { key: `Proyeksi ${filters.tahun}`, color: '#dc2626', name: `Proyeksi ${filters.tahun}`, dashed: true },
+              { key: `Realisasi ${currentYear - 1}`, color: '#b5b5bd', name: `Realisasi ${currentYear - 1}` },
+              { key: `Proyeksi ${currentYear}`, color: '#dc2626', name: `Proyeksi ${currentYear}`, dashed: true },
             ]}
           />
         </div>
 
         <div className="card p-5">
-          <h3 className="font-bold text-sm mb-1">Rincian Bulanan Proyeksi {semesterLabel} ({filters.tahun} vs {filters.tahun - 1})</h3>
+          <h3 className="font-bold text-sm mb-1">Rincian Bulanan Proyeksi {periodLabel} ({currentYear} vs {currentYear - 1})</h3>
           <p className="text-xs text-ink-400 mb-3">
             Mencakup bulan {MONTH_NAMES_ID[monthRange[0] - 1]} hingga {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]}
           </p>
@@ -182,8 +219,8 @@ export default function ProyeksiS2() {
               <thead>
                 <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
                   <th className="py-2 pr-3">Bulan</th>
-                  <th className="py-2 pr-3 text-right">Penjualan Aktual {filters.tahun - 1}</th>
-                  <th className="py-2 pr-3 text-right">Penjualan Proyeksi {filters.tahun}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Aktual {currentYear - 1}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Proyeksi {currentYear}</th>
                   <th className="py-2 pr-3 text-right">Selisih Nominal (Rp)</th>
                   <th className="py-2 pr-3 text-right">Persentase Perubahan (%)</th>
                 </tr>
@@ -207,7 +244,7 @@ export default function ProyeksiS2() {
                   );
                 })}
                 <tr className="font-bold border-t-2 border-ink-200 dark:border-ink-700">
-                  <td className="py-2 pr-3">TOTAL {semesterLabel.toUpperCase()}</td>
+                  <td className="py-2 pr-3">TOTAL {periodLabel.toUpperCase()}</td>
                   <td className="py-2 pr-3 text-right">{formatRupiah(baselineTotal)}</td>
                   <td className="py-2 pr-3 text-right">{formatRupiah(projectedTotal)}</td>
                   <td className={`py-2 pr-3 text-right ${selisih >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>

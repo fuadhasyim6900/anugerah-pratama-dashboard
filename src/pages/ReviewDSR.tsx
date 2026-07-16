@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import TopBar from '../components/TopBar';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
-import { applyFilters, distinctDSR, avgMonthlyAOByDSR, formatRupiah, formatNumber } from '../lib/aggregate';
+import { applyFilters, distinctDSR, avgMonthlyAOByDSR, formatRupiah, formatNumber, depoLabel, tahunLabel } from '../lib/aggregate';
 import { buildDSRInsight } from '../lib/dsrInsights';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 import { AlertTriangle, Lightbulb } from 'lucide-react';
@@ -12,7 +12,7 @@ export default function ReviewDSR() {
   const filters = useFilterStore();
 
   const filtered = useMemo(
-    () => applyFilters(sales, { ...filters, bulan: 0 }),
+    () => applyFilters(sales, { ...filters, bulan: [] }),
     [sales, filters]
   );
 
@@ -32,7 +32,7 @@ export default function ReviewDSR() {
     <div>
       <TopBar
         title="Review Kinerja DSR & Solusi Strategis"
-        subtitle={`Analisis komprehensif kelemahan setiap DSR di ${filters.depo === 'ALL' ? 'seluruh depo' : `Depo ${filters.depo}`} dan rekomendasi perbaikan untuk peningkatan performa Semester 2 ${filters.tahun}.`}
+        subtitle={`Analisis komprehensif kelemahan setiap DSR di ${filters.depo.length === 0 ? 'seluruh depo' : depoLabel(filters.depo)} dan rekomendasi perbaikan untuk peningkatan performa periode ${tahunLabel(filters.tahun)}.`}
       />
       <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-5">
         {insights.length === 0 && (

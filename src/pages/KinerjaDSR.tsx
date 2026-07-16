@@ -2,11 +2,13 @@ import { useMemo, useState, useEffect } from 'react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
+import MultiSelect from '../components/MultiSelect';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
   applyFilters, salesByDSR, avgMonthlyAOByDSR, telemarketingContribution,
   supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
+  distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
@@ -50,15 +52,15 @@ export default function KinerjaDSR() {
     [filtered, selectedDSR]
   );
 
-  const periodLabel = filters.bulan === 0
-    ? `Januari - ${MONTH_NAMES_ID[Math.max(...filtered.map((r) => r.monthNum), 1) - 1] || 'Juni'} ${filters.tahun}`
-    : `${MONTH_NAMES_ID[filters.bulan - 1]} ${filters.tahun}`;
+  const isAllMonths = filters.bulan.length === 0;
+  const periodLabel = isAllMonths
+    ? `Januari - ${MONTH_NAMES_ID[Math.max(...filtered.map((r) => r.monthNum), 1) - 1] || 'Des'} ${tahunLabel(filters.tahun)}`
+    : `${bulanLabel(filters.bulan)} ${tahunLabel(filters.tahun)}`;
 
   // "Rata-rata" only makes sense when the AO count is actually being averaged
   // across more than one month (i.e. "Semua Bulan" is selected). When a single
   // month is picked, avgMonthlyAOByDSR effectively returns a plain distinct
   // count for that month, so the label should say so instead of "Rata-rata".
-  const isAllMonths = filters.bulan === 0;
   const aoChartTitle = isAllMonths ? 'Rata-rata Outlet Aktif (AO) DSR' : 'Outlet Aktif (AO) DSR';
   const aoChartDesc = isAllMonths
     ? `Rata-rata Bulanan Outlet Unik Terlayani per DSR (Periode ${periodLabel})`
@@ -66,12 +68,89 @@ export default function KinerjaDSR() {
   const aoSeriesName = isAllMonths ? 'Rata-rata AO' : 'AO';
   const aoDetailLabel = isAllMonths ? 'Rata-rata AO Bulanan' : 'Outlet Aktif (AO) Bulan Ini';
 
+  // --- Tabel Perbandingan Sales DSR -----------------------------------
+  // Own Tahun A / Tahun B / Nama DSR filters (all multi-select). The main
+  // Bulan & Depo filters from the sidebar still apply on top of these.
+  const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+  const [cmpTahunA, setCmpTahunA] = useState<number[]>([]);
+  const [cmpTahunB, setCmpTahunB] = useState<number[]>([]);
+  useEffect(() => {
+    if (availableYears.length >= 2 && cmpTahunA.length === 0 && cmpTahunB.length === 0) {
+      setCmpTahunA([availableYears[availableYears.length - 2]]);
+      setCmpTahunB([availableYears[availableYears.length - 1]]);
+    } else if (availableYears.length === 1 && cmpTahunA.length === 0 && cmpTahunB.length === 0) {
+      setCmpTahunA([availableYears[0]]);
+      setCmpTahunB([availableYears[0]]);
+    }
+  }, [availableYears, cmpTahunA.length, cmpTahunB.length]);
+
+  const dsrOptionsForCompare = useMemo(
+    () => distinctDSR(applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [] })),
+    [sales, filters.depo]
+  );
+  const [compareDSR, setCompareDSR] = useState<string[]>([]);
+  // Drop any selected DSR names that are no longer valid options (e.g. depo filter changed).
+  useEffect(() => {
+    setCompareDSR((prev) => prev.filter((d) => dsrOptionsForCompare.includes(d)));
+  }, [dsrOptionsForCompare]);
+
+  const cmpMonthsToShow = useMemo(
+    () => (filters.bulan.length ? [...filters.bulan].sort((a, b) => a - b) : Array.from({ length: 12 }, (_, i) => i + 1)),
+    [filters.bulan]
+  );
+
+  const dsrSalesComparison = useMemo(() => {
+    let rowsA = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunA });
+    let rowsB = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunB });
+    if (compareDSR.length) {
+      rowsA = rowsA.filter((r) => compareDSR.includes(r.sales));
+      rowsB = rowsB.filter((r) => compareDSR.includes(r.sales));
+    }
+
+    const rows = cmpMonthsToShow.map((monthNum) => {
+      const label = MONTH_NAMES_ID[monthNum - 1];
+      const aRows = rowsA.filter((r) => r.monthNum === monthNum);
+      const bRows = rowsB.filter((r) => r.monthNum === monthNum);
+      const salesA = sumNominal(aRows);
+      const salesB = sumNominal(bRows);
+      const aoA = distinctCount(aRows, 'kdGrup');
+      const aoB = distinctCount(bRows, 'kdGrup');
+      return {
+        bulan: label,
+        salesA, salesB,
+        salesGrowth: pctChange(salesB, salesA),
+        aoA, aoB,
+        aoGrowth: pctChange(aoB, aoA),
+      };
+    });
+
+    const rowsAInScope = rowsA.filter((r) => cmpMonthsToShow.includes(r.monthNum));
+    const rowsBInScope = rowsB.filter((r) => cmpMonthsToShow.includes(r.monthNum));
+    const grandSalesA = sumNominal(rowsAInScope);
+    const grandSalesB = sumNominal(rowsBInScope);
+    const grandAoA = distinctCount(rowsAInScope, 'kdGrup');
+    const grandAoB = distinctCount(rowsBInScope, 'kdGrup');
+
+    return {
+      rows,
+      grandTotal: {
+        salesA: grandSalesA, salesB: grandSalesB,
+        salesGrowth: pctChange(grandSalesB, grandSalesA),
+        aoA: grandAoA, aoB: grandAoB,
+        aoGrowth: pctChange(grandAoB, grandAoA),
+      },
+    };
+  }, [sales, filters.depo, cmpMonthsToShow, cmpTahunA, cmpTahunB, compareDSR]);
+
+  const cmpTahunALabel = cmpTahunA.length ? [...cmpTahunA].sort((a, b) => a - b).join('+') : '-';
+  const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
   return (
     <div>
-      <TopBar title="Kinerja DSR" subtitle={`${filters.depo === 'ALL' ? 'Semua Depo' : filters.depo} · Periode ${periodLabel}`} />
+      <TopBar title="Kinerja DSR" subtitle={`${depoLabel(filters.depo)} · Periode ${periodLabel}`} />
       <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <KpiCard
@@ -149,7 +228,7 @@ export default function KinerjaDSR() {
             <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
               <div>
                 <h3 className="font-bold text-sm">Distribusi Produk / Supplier DSR</h3>
-                <p className="text-xs text-ink-400">Breakdown Penjualan DSR Terpilih di {filters.tahun} YTD</p>
+                <p className="text-xs text-ink-400">Breakdown Penjualan DSR Terpilih di {tahunLabel(filters.tahun)} YTD</p>
                 <p className="text-lg font-extrabold mt-1">DSR: {selectedDSR ?? '-'}</p>
               </div>
 
@@ -174,7 +253,7 @@ export default function KinerjaDSR() {
                 <thead>
                   <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
                     <th className="py-2 pr-3">Nama Brand / Supplier</th>
-                    <th className="py-2 pr-3 text-right">Penjualan {filters.tahun} (YTD)</th>
+                    <th className="py-2 pr-3 text-right">Penjualan {tahunLabel(filters.tahun)} (YTD)</th>
                     <th className="py-2 pr-3 text-right">Porsi (%)</th>
                     <th className="py-2 pr-3 text-right">{isAllMonths ? 'Rata-rata AO' : 'AO'}</th>
                   </tr>
@@ -194,6 +273,97 @@ export default function KinerjaDSR() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
+              <p className="text-xs text-ink-400">
+                Perbandingan penjualan &amp; AO antar dua kelompok tahun, per bulan · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-36">
+                <MultiSelect
+                  label="Tahun A"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={cmpTahunA.map(String)}
+                  onChange={(v) => setCmpTahunA(v.map(Number))}
+                  allLabel="Pilih Tahun A"
+                />
+              </div>
+              <div className="w-full sm:w-36">
+                <MultiSelect
+                  label="Tahun B"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={cmpTahunB.map(String)}
+                  onChange={(v) => setCmpTahunB(v.map(Number))}
+                  allLabel="Pilih Tahun B"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Nama DSR"
+                  options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
+                  selected={compareDSR}
+                  onChange={setCompareDSR}
+                  allLabel="Semua DSR"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Bulan</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
+                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dsrSalesComparison.rows.map((m) => (
+                  <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+                {dsrSalesComparison.rows.length === 0 && (
+                  <tr><td colSpan={7} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {dsrSalesComparison.grandTotal && dsrSalesComparison.rows.length > 0 && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dsrSalesComparison.grandTotal.salesGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(dsrSalesComparison.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(dsrSalesComparison.grandTotal.aoB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dsrSalesComparison.grandTotal.aoGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
