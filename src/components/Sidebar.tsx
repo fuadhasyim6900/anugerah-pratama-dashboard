@@ -49,13 +49,14 @@ export default function Sidebar() {
         className={clsx(
           'no-print w-72 shrink-0 flex flex-col bg-white dark:bg-ink-900 border-r border-ink-100 dark:border-ink-800',
           'fixed inset-y-0 left-0 z-50 h-full transition-transform duration-200 ease-out',
+          'overflow-y-auto overscroll-contain',
           'md:sticky md:top-0 md:h-screen md:z-30 md:transition-[margin,transform] md:duration-200',
           mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           'md:translate-x-0',
           sidebarCollapsed && 'md:-ml-72 md:pointer-events-none md:opacity-0',
         )}
       >
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-ink-100 dark:border-ink-800">
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-ink-100 dark:border-ink-800 sticky top-0 z-10 bg-white dark:bg-ink-900">
           <img src="/Logo-AP_PNG.webp" alt="Logo CV Anugerah Pratama" className="h-10 w-10 object-contain shrink-0" />
           <div className="min-w-0">
             <div className="font-extrabold leading-tight text-sm tracking-tight">CV ANUGERAH PRATAMA</div>
@@ -70,7 +71,7 @@ export default function Sidebar() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="shrink-0 px-3 py-4 space-y-1">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -121,7 +122,7 @@ export default function Sidebar() {
           />
         </div>
 
-        <div className="px-5 py-3 text-[11px] text-ink-400 border-t border-ink-100 dark:border-ink-800">
+        <div className="px-5 py-3 text-[11px] text-ink-400 border-t border-ink-100 dark:border-ink-800 mt-auto">
           © {new Date().getFullYear()} CV Anugerah Pratama
         </div>
       </aside>

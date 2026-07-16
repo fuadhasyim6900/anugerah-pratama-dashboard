@@ -56,7 +56,7 @@ export default function MultiSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[180px] max-h-64 overflow-y-auto rounded-lg border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 shadow-card p-1">
+        <div className="absolute z-50 mt-1 w-full min-w-[180px] max-h-[45vh] sm:max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 shadow-card p-1">
           <button
             type="button"
             onClick={() => onChange([])}
