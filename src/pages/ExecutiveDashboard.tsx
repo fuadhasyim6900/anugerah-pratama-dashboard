@@ -70,10 +70,13 @@ export default function ExecutiveDashboard() {
   }, [availableYears, tahunA, tahunB]);
 
   const monthlyComparison = useMemo(() => {
-    if (tahunA === null || tahunB === null) return [];
+    if (tahunA === null || tahunB === null) return { rows: [], grandTotal: null as null | {
+      salesA: number; salesB: number; salesGrowth: number | null;
+      aoA: number; aoB: number; aoGrowth: number | null;
+    } };
     const rowsA = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunA });
     const rowsB = applyFilters(sales, { depo: filters.depo, bulan: 0, tahun: tahunB });
-    return MONTH_NAMES_ID.map((label, idx) => {
+    const rows = MONTH_NAMES_ID.map((label, idx) => {
       const monthNum = idx + 1;
       const aRows = rowsA.filter((r) => r.monthNum === monthNum);
       const bRows = rowsB.filter((r) => r.monthNum === monthNum);
@@ -89,6 +92,24 @@ export default function ExecutiveDashboard() {
         aoGrowth: pctChange(aoB, aoA),
       };
     });
+
+    const grandSalesA = sumNominal(rowsA);
+    const grandSalesB = sumNominal(rowsB);
+    // Grand-total AO is the count of *distinct* outlets across the whole year
+    // (not the sum of each month's AO), otherwise an outlet active in several
+    // months would be counted multiple times and inflate the total.
+    const grandAoA = distinctCount(rowsA, 'kdGrup');
+    const grandAoB = distinctCount(rowsB, 'kdGrup');
+
+    return {
+      rows,
+      grandTotal: {
+        salesA: grandSalesA, salesB: grandSalesB,
+        salesGrowth: pctChange(grandSalesB, grandSalesA),
+        aoA: grandAoA, aoB: grandAoB,
+        aoGrowth: pctChange(grandAoB, grandAoA),
+      },
+    };
   }, [sales, filters.depo, tahunA, tahunB]);
 
   if (loading) return <LoadingState />;
@@ -222,7 +243,7 @@ export default function ExecutiveDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {monthlyComparison.map((m) => (
+                {monthlyComparison.rows.map((m) => (
                   <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
                     <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
                     <td className="py-2 pr-3 text-right">{formatRupiah(m.salesA)}</td>
@@ -237,6 +258,21 @@ export default function ExecutiveDashboard() {
                     </td>
                   </tr>
                 ))}
+                {monthlyComparison.grandTotal && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(monthlyComparison.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(monthlyComparison.grandTotal.salesB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${monthlyComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : monthlyComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {monthlyComparison.grandTotal.salesGrowth === null ? '-' : `${monthlyComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${monthlyComparison.grandTotal.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(monthlyComparison.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(monthlyComparison.grandTotal.aoB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${monthlyComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : monthlyComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {monthlyComparison.grandTotal.aoGrowth === null ? '-' : `${monthlyComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${monthlyComparison.grandTotal.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
