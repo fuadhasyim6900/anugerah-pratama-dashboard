@@ -9,7 +9,7 @@ import {
   applyFilters, salesByDSR, avgMonthlyAOByDSR, telemarketingContribution,
   supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
-  distinctMonthsPresent, distinctYearsPresent, targetVsOmsetPerSupplier,
+  targetVsOmsetBySupplier,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
@@ -146,45 +146,20 @@ export default function KinerjaDSR() {
   const cmpTahunALabel = cmpTahunA.length ? [...cmpTahunA].sort((a, b) => a - b).join('+') : '-';
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
 
-  // --- Tabel Perbandingan Target vs Omset per Supplier ------------------
-  // Own Nama DSR filter (multi-select, empty = semua DSR). Target period is
-  // matched to whatever months/years are actually present in `filtered` so
-  // it always covers the same span as the current global filters (mirrors
-  // the YTD logic used on the Executive Dashboard).
-  const targetMonthsPresent = useMemo(() => distinctMonthsPresent(filtered), [filtered]);
-  const targetYearsPresent = useMemo(() => distinctYearsPresent(filtered), [filtered]);
-
-  const dsrOptionsForTarget = useMemo(() => distinctDSR(filtered), [filtered]);
+  // --- Tabel Target vs Omset per Supplier ------------------------------
+  // Own "Nama DSR" filter (multi-select, default = semua DSR). The main
+  // Depo/Bulan/Tahun filters from the sidebar still apply on top of this.
   const [targetDSRFilter, setTargetDSRFilter] = useState<string[]>([]);
   useEffect(() => {
-    setTargetDSRFilter((prev) => prev.filter((d) => dsrOptionsForTarget.includes(d)));
-  }, [dsrOptionsForTarget]);
+    setTargetDSRFilter((prev) => prev.filter((d) => dsrOptionsForCompare.includes(d)));
+  }, [dsrOptionsForCompare]);
 
-  const targetScopeRows = useMemo(
-    () => (targetDSRFilter.length ? filtered.filter((r) => targetDSRFilter.includes(r.sales)) : filtered),
-    [filtered, targetDSRFilter]
+  const targetVsOmset = useMemo(
+    () => targetVsOmsetBySupplier(sales, targets, {
+      depo: filters.depo, bulan: filters.bulan, tahun: filters.tahun, dsr: targetDSRFilter,
+    }),
+    [sales, targets, filters.depo, filters.bulan, filters.tahun, targetDSRFilter]
   );
-
-  const targetVsOmsetRows = useMemo(
-    () => targetVsOmsetPerSupplier(
-      targets, targetScopeRows, targetMonthsPresent, targetYearsPresent, filters.depo, targetDSRFilter
-    ),
-    [targets, targetScopeRows, targetMonthsPresent, targetYearsPresent, filters.depo, targetDSRFilter]
-  );
-
-  const targetVsOmsetGrandTotal = useMemo(() => {
-    const target = targetVsOmsetRows.reduce((a, r) => a + r.target, 0);
-    const omset = targetVsOmsetRows.reduce((a, r) => a + r.omset, 0);
-    const kekurangan = target - omset;
-    const pctKekurangan = target ? (kekurangan / target) * 100 : null;
-    return { target, omset, kekurangan, pctKekurangan };
-  }, [targetVsOmsetRows]);
-
-  const targetDSRLabel = targetDSRFilter.length === 0
-    ? 'Semua DSR'
-    : targetDSRFilter.length === 1
-      ? targetDSRFilter[0]
-      : `${targetDSRFilter.length} DSR dipilih`;
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -411,15 +386,15 @@ export default function KinerjaDSR() {
         <div className="card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
-              <h3 className="font-bold text-sm">Perbandingan Target vs Omset per Supplier</h3>
+              <h3 className="font-bold text-sm">Tabel Target vs Omset per Supplier</h3>
               <p className="text-xs text-ink-400">
-                Target dan realisasi omset per supplier untuk {targetDSRLabel} · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)} {tahunLabel(filters.tahun)}
+                Perbandingan target dan realisasi omset DSR per supplier · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
               </p>
             </div>
             <div className="w-full sm:w-56">
               <MultiSelect
                 label="Nama DSR"
-                options={dsrOptionsForTarget.map((d) => ({ value: d, label: d }))}
+                options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
                 selected={targetDSRFilter}
                 onChange={setTargetDSRFilter}
                 allLabel="Semua DSR"
@@ -434,37 +409,37 @@ export default function KinerjaDSR() {
                   <th className="py-2 pr-3">Supplier</th>
                   <th className="py-2 pr-3 text-right">Target</th>
                   <th className="py-2 pr-3 text-right">Omset</th>
-                  <th className="py-2 pr-3 text-right">Kekurangan (Rp)</th>
+                  <th className="py-2 pr-3 text-right">Kekurangan</th>
                   <th className="py-2 pr-3 text-right">Kekurangan (%)</th>
                 </tr>
               </thead>
               <tbody>
-                {targetVsOmsetRows.map((r) => (
+                {targetVsOmset.rows.map((r) => (
                   <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
                     <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
                     <td className="py-2 pr-3 text-right">{formatRupiah(r.target)}</td>
                     <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
                     <td className={`py-2 pr-3 text-right font-semibold ${r.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {r.kekurangan > 0 ? '-' : '+'}{formatRupiah(Math.abs(r.kekurangan))}
+                      {formatRupiah(r.kekurangan)}
                     </td>
-                    <td className={`py-2 pr-3 text-right font-semibold ${r.pctKekurangan === null ? 'text-ink-400' : r.pctKekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {r.pctKekurangan === null ? '-' : `${r.pctKekurangan > 0 ? '-' : '+'}${Math.abs(r.pctKekurangan).toFixed(1)}%`}
+                    <td className={`py-2 pr-3 text-right font-semibold ${r.kekuranganPct === null ? 'text-ink-400' : r.kekuranganPct > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                      {r.kekuranganPct === null ? '-' : `${r.kekuranganPct > 0 ? '' : ''}${r.kekuranganPct.toFixed(1)}%`}
                     </td>
                   </tr>
                 ))}
-                {targetVsOmsetRows.length === 0 && (
-                  <tr><td colSpan={5} className="py-6 text-center text-ink-400">Tidak ada data target/omset untuk filter ini</td></tr>
+                {targetVsOmset.rows.length === 0 && (
+                  <tr><td colSpan={5} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
                 )}
-                {targetVsOmsetRows.length > 0 && (
+                {targetVsOmset.rows.length > 0 && (
                   <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
                     <td className="py-2.5 pr-3">Grand Total</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmsetGrandTotal.target)}</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmsetGrandTotal.omset)}</td>
-                    <td className={`py-2.5 pr-3 text-right ${targetVsOmsetGrandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {targetVsOmsetGrandTotal.kekurangan > 0 ? '-' : '+'}{formatRupiah(Math.abs(targetVsOmsetGrandTotal.kekurangan))}
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.target)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.omset)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                      {formatRupiah(targetVsOmset.grandTotal.kekurangan)}
                     </td>
-                    <td className={`py-2.5 pr-3 text-right ${targetVsOmsetGrandTotal.pctKekurangan === null ? 'text-ink-400' : targetVsOmsetGrandTotal.pctKekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {targetVsOmsetGrandTotal.pctKekurangan === null ? '-' : `${targetVsOmsetGrandTotal.pctKekurangan > 0 ? '-' : '+'}${Math.abs(targetVsOmsetGrandTotal.pctKekurangan).toFixed(1)}%`}
+                    <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekuranganPct === null ? 'text-ink-400' : targetVsOmset.grandTotal.kekuranganPct > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                      {targetVsOmset.grandTotal.kekuranganPct === null ? '-' : `${targetVsOmset.grandTotal.kekuranganPct.toFixed(1)}%`}
                     </td>
                   </tr>
                 )}
@@ -472,7 +447,7 @@ export default function KinerjaDSR() {
             </table>
           </div>
           <p className="text-[11px] text-ink-400 mt-3">
-            * Kekurangan (Rp) = Target − Omset. Nilai berwarna hijau dengan tanda "+" berarti omset sudah melebihi target (surplus); merah dengan tanda "-" berarti omset masih di bawah target.
+            Kekurangan = Target − Omset. Nilai merah berarti omset belum mencapai target; nilai hijau berarti omset sudah mencapai atau melampaui target.
           </p>
         </div>
       </div>

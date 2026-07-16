@@ -58,24 +58,20 @@ export function distinctCount(rows: SalesRow[], key: keyof SalesRow): number {
   return new Set(rows.map((r) => r[key])).size;
 }
 
-// Sum target nominal for the given depo + year(s), restricted to a specific set
-// of months (1-12). Pass the months/years that are actually present in the
-// comparable actual data so target and realisasi always cover the same period.
-// Year-aware because the target sheet now stacks multiple years (TAHUN column)
-// in one file — without this, totals would double/triple count past years.
-export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[], tahunNums: number[]): number {
+// Sum target nominal for the given depo/tahun, restricted to a specific set of
+// months (1-12). Pass the months that are actually present in the comparable
+// actual data so target and realisasi always cover the same period. Targets
+// are year-specific (each row belongs to a single TAHUN), so a tahun filter is
+// applied the same way depo is.
+export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[], tahun: number[] = []): number {
   const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
   return targets
-    .filter((t) => (depo.length === 0 || depo.includes(t.depo)) && (tahunNums.length === 0 || tahunNums.includes(t.tahun)))
+    .filter((t) => (depo.length === 0 || depo.includes(t.depo)) && (tahun.length === 0 || tahun.includes(t.tahun)))
     .reduce((acc, t) => acc + idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0), 0);
 }
 
 export function distinctMonthsPresent(rows: SalesRow[]): number[] {
   return Array.from(new Set(rows.map((r) => r.monthNum))).filter((m) => m >= 1 && m <= 12).sort((a, b) => a - b);
-}
-
-export function distinctYearsPresent(rows: SalesRow[]): number[] {
-  return Array.from(new Set(rows.map((r) => r.tahun))).filter(Boolean).sort((a, b) => a - b);
 }
 
 export function groupSumBy(rows: SalesRow[], key: keyof SalesRow): { label: string; value: number }[] {
@@ -188,53 +184,85 @@ export function pctChange(current: number, previous: number): number | null {
   return ((current - previous) / previous) * 100;
 }
 
-export interface TargetVsOmsetSupplierRow {
+export interface SupplierTargetRow {
   supplier: string;
   target: number;
   omset: number;
-  kekurangan: number; // target - omset (positive = shortfall, negative = target exceeded)
-  pctKekurangan: number | null; // (kekurangan / target) * 100, null when target is 0
+  kekurangan: number;          // target - omset (positive = shortfall, negative = exceeded target)
+  kekuranganPct: number | null; // kekurangan as % of target, null when target is 0
 }
 
-// Target vs realisasi omset per supplier, scoped to one/several DSR (or all DSR
-// when dsrNames is empty). `scopedSalesRows` should already be filtered to the
-// desired DSR(s) + depo/bulan/tahun scope so the omset side lines up with the
-// target side (which applies the same depo/tahun/DSR filters internally).
-export function targetVsOmsetPerSupplier(
+// Per-supplier comparison of target (from DATA_TARGET_FUAD, matched by DSR
+// name/depo/tahun) vs actual omset (from the sales rows), for one or more
+// selected DSR. Empty `dsr` means "semua DSR". Depo/Bulan/Tahun mirror the
+// global sidebar filters so both sides of the comparison stay in sync.
+export function targetVsOmsetBySupplier(
+  sales: SalesRow[],
   targets: TargetRow[],
-  scopedSalesRows: SalesRow[],
-  monthNums: number[],
-  tahunNums: number[],
-  depo: string[],
-  dsrNames: string[], // empty = semua DSR
-): TargetVsOmsetSupplierRow[] {
-  const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
-  const dsrKeySet = new Set(dsrNames.map((d) => d.trim().toUpperCase()));
+  opts: { depo: string[]; bulan: number[]; tahun: number[]; dsr: string[] }
+): { rows: SupplierTargetRow[]; grandTotal: SupplierTargetRow } {
+  const monthIdxs = (opts.bulan.length ? opts.bulan : Array.from({ length: 12 }, (_, i) => i + 1))
+    .map((m) => m - 1)
+    .filter((i) => i >= 0 && i <= 11);
+  const dsrSet = new Set(opts.dsr.map((d) => d.trim().toUpperCase()));
 
-  const targetMap = new Map<string, number>();
-  for (const t of targets) {
-    if (dsrKeySet.size && !dsrKeySet.has(t.namaSalesman.trim().toUpperCase())) continue;
-    if (depo.length && !depo.includes(t.depo)) continue;
-    if (tahunNums.length && !tahunNums.includes(t.tahun)) continue;
-    const supplierKey = t.supplier.trim().toUpperCase();
-    if (!supplierKey) continue;
-    const sum = idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0);
-    targetMap.set(supplierKey, (targetMap.get(supplierKey) || 0) + sum);
+  const filteredTargets = targets.filter((t) => {
+    if (opts.depo.length && !opts.depo.includes(t.depo)) return false;
+    if (opts.tahun.length && !opts.tahun.includes(t.tahun)) return false;
+    if (dsrSet.size && !dsrSet.has(t.namaSalesman.trim().toUpperCase())) return false;
+    return true;
+  });
+
+  const filteredSales = sales.filter((r) => {
+    if (opts.depo.length && !opts.depo.includes(r.depo)) return false;
+    if (opts.bulan.length && !opts.bulan.includes(r.monthNum)) return false;
+    if (opts.tahun.length && !opts.tahun.includes(r.tahun)) return false;
+    if (dsrSet.size && !dsrSet.has(r.sales.trim().toUpperCase())) return false;
+    return true;
+  });
+
+  const map = new Map<string, { target: number; omset: number }>();
+
+  for (const t of filteredTargets) {
+    const key = t.supplier.trim().toUpperCase() || '(Kosong)';
+    const sum = monthIdxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0);
+    const entry = map.get(key) || { target: 0, omset: 0 };
+    entry.target += sum;
+    map.set(key, entry);
   }
 
-  const omsetMap = new Map<string, number>();
-  for (const r of scopedSalesRows) {
-    const supplierKey = r.supp.trim().toUpperCase();
-    if (!supplierKey) continue;
-    omsetMap.set(supplierKey, (omsetMap.get(supplierKey) || 0) + r.nominal);
+  for (const r of filteredSales) {
+    const key = r.supp.trim().toUpperCase() || '(Kosong)';
+    const entry = map.get(key) || { target: 0, omset: 0 };
+    entry.omset += r.nominal;
+    map.set(key, entry);
   }
 
-  const allSuppliers = new Set([...targetMap.keys(), ...omsetMap.keys()]);
-  return Array.from(allSuppliers).map((supplier) => {
-    const target = targetMap.get(supplier) || 0;
-    const omset = omsetMap.get(supplier) || 0;
-    const kekurangan = target - omset;
-    const pctKekurangan = target ? (kekurangan / target) * 100 : null;
-    return { supplier, target, omset, kekurangan, pctKekurangan };
-  }).sort((a, b) => b.target - a.target || b.omset - a.omset);
+  const rows: SupplierTargetRow[] = Array.from(map.entries())
+    .map(([supplier, v]) => {
+      const kekurangan = v.target - v.omset;
+      return {
+        supplier,
+        target: v.target,
+        omset: v.omset,
+        kekurangan,
+        kekuranganPct: v.target ? (kekurangan / v.target) * 100 : null,
+      };
+    })
+    .sort((a, b) => b.target - a.target);
+
+  const grandTarget = rows.reduce((a, r) => a + r.target, 0);
+  const grandOmset = rows.reduce((a, r) => a + r.omset, 0);
+  const grandKekurangan = grandTarget - grandOmset;
+
+  return {
+    rows,
+    grandTotal: {
+      supplier: 'Grand Total',
+      target: grandTarget,
+      omset: grandOmset,
+      kekurangan: grandKekurangan,
+      kekuranganPct: grandTarget ? (grandKekurangan / grandTarget) * 100 : null,
+    },
+  };
 }
