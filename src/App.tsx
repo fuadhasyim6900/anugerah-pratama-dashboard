@@ -30,7 +30,7 @@ function Layout() {
   return (
     <div className="flex min-h-screen overflow-x-hidden">
       <Sidebar />
-      <main className="flex-1 min-w-0">
+      <main id="app-main" className="flex-1 min-w-0">
         <Routes>
           <Route path="/" element={<ExecutiveDashboard />} />
           <Route path="/kinerja-dsr" element={<KinerjaDSR />} />

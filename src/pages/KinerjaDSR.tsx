@@ -54,6 +54,18 @@ export default function KinerjaDSR() {
     ? `Januari - ${MONTH_NAMES_ID[Math.max(...filtered.map((r) => r.monthNum), 1) - 1] || 'Juni'} ${filters.tahun}`
     : `${MONTH_NAMES_ID[filters.bulan - 1]} ${filters.tahun}`;
 
+  // "Rata-rata" only makes sense when the AO count is actually being averaged
+  // across more than one month (i.e. "Semua Bulan" is selected). When a single
+  // month is picked, avgMonthlyAOByDSR effectively returns a plain distinct
+  // count for that month, so the label should say so instead of "Rata-rata".
+  const isAllMonths = filters.bulan === 0;
+  const aoChartTitle = isAllMonths ? 'Rata-rata Outlet Aktif (AO) DSR' : 'Outlet Aktif (AO) DSR';
+  const aoChartDesc = isAllMonths
+    ? `Rata-rata Bulanan Outlet Unik Terlayani per DSR (Periode ${periodLabel})`
+    : `Jumlah Outlet Unik Terlayani per DSR (Periode ${periodLabel})`;
+  const aoSeriesName = isAllMonths ? 'Rata-rata AO' : 'AO';
+  const aoDetailLabel = isAllMonths ? 'Rata-rata AO Bulanan' : 'Outlet Aktif (AO) Bulan Ini';
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
@@ -86,15 +98,15 @@ export default function KinerjaDSR() {
           </div>
 
           <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Rata-rata Outlet Aktif (AO) DSR</h3>
-            <p className="text-xs text-ink-400 mb-3">Rata-rata Bulanan Outlet Unik Terlayani per DSR</p>
+            <h3 className="font-bold text-sm mb-1">{aoChartTitle}</h3>
+            <p className="text-xs text-ink-400 mb-3">{aoChartDesc}</p>
             <BarChartCard
               data={avgAO.map((r) => ({ dsr: r.dsr, AO: r.avgAo }))}
               xKey="dsr"
               horizontal
               height={Math.max(260, avgAO.length * 28)}
               valueFormatter={(v) => `${formatNumber(v)} outlet`}
-              series={[{ key: 'AO', color: '#b91c1c', name: 'Rata-rata AO' }]}
+              series={[{ key: 'AO', color: '#b91c1c', name: aoSeriesName }]}
             />
           </div>
         </div>
@@ -147,7 +159,7 @@ export default function KinerjaDSR() {
                   <p className="text-xl font-extrabold text-brand-600">{formatRupiah(dsrTotal)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-ink-400 font-semibold">Rata-rata AO Bulanan</p>
+                  <p className="text-xs text-ink-400 font-semibold">{aoDetailLabel}</p>
                   <p className="text-xl font-extrabold">{formatNumber(dsrAvgAO)} Outlet</p>
                 </div>
               </div>
@@ -164,7 +176,7 @@ export default function KinerjaDSR() {
                     <th className="py-2 pr-3">Nama Brand / Supplier</th>
                     <th className="py-2 pr-3 text-right">Penjualan {filters.tahun} (YTD)</th>
                     <th className="py-2 pr-3 text-right">Porsi (%)</th>
-                    <th className="py-2 pr-3 text-right">Rata-rata AO</th>
+                    <th className="py-2 pr-3 text-right">{isAllMonths ? 'Rata-rata AO' : 'AO'}</th>
                   </tr>
                 </thead>
                 <tbody>

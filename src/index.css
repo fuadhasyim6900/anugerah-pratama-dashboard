@@ -66,5 +66,27 @@ body {
   .print-only { display: block !important; }
   .print-page-break { break-after: page; page-break-after: always; }
   .card { box-shadow: none !important; border: 1px solid #e5e5e5 !important; }
+
+  /* While exporting the merged "Laporan Lengkap", hide the live single-route
+     app content so only the assembled multi-page report prints. */
+  body.printing-full-report #app-main { display: none !important; }
 }
 .print-only { display: none; }
+
+.full-report-print-page {
+  padding: 6mm 2mm;
+  break-after: page;
+  page-break-after: always;
+}
+.full-report-print-page:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.full-report-print-page-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 4mm;
+  padding-bottom: 3mm;
+  border-bottom: 2px solid #dc2626;
+  color: #0c0c0e;
+}
