@@ -85,10 +85,11 @@ export default function KinerjaDSR() {
     }
   }, [availableYears, cmpTahunA.length, cmpTahunB.length]);
 
-  const dsrOptionsForCompare = useMemo(
-    () => distinctDSR(applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [] })),
-    [sales, filters.depo]
-  );
+  // DSR options for the "Nama DSR" filters below match the same active DSR
+  // list as "Daftar DSR" on this page (i.e. respect Depo/Bulan/Tahun), so a
+  // DSR with no data in the selected period (e.g. ARDIAN in 2026) simply
+  // won't show up as a selectable option.
+  const dsrOptionsForCompare = useMemo(() => distinctDSR(filtered), [filtered]);
   const [compareDSR, setCompareDSR] = useState<string[]>([]);
   // Drop any selected DSR names that are no longer valid options (e.g. depo filter changed).
   useEffect(() => {
