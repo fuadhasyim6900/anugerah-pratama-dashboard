@@ -136,7 +136,7 @@ export default function ExecutiveDashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card p-5">
             <h3 className="font-bold text-sm mb-1">Target vs Realisasi</h3>
             <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
