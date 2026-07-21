@@ -11,7 +11,7 @@ import {
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
   targetVsOmsetBySupplier,
 } from '../lib/aggregate';
-import { MONTH_NAMES_ID } from '../lib/types';
+import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 import { Phone, Search, Crown } from 'lucide-react';
 
@@ -302,6 +302,15 @@ export default function KinerjaDSR() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
               <div className="w-full sm:w-36">
                 <MultiSelect
                   label="Tahun A"

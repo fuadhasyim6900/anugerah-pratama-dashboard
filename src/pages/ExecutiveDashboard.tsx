@@ -4,6 +4,7 @@ import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
 import LineChartCard from '../components/charts/LineChartCard';
+import MultiSelect from '../components/MultiSelect';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
@@ -11,7 +12,7 @@ import {
   formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
   pctChange, depoLabel, bulanLabel, tahunLabel,
 } from '../lib/aggregate';
-import { MONTH_NAMES_ID } from '../lib/types';
+import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 
 export default function ExecutiveDashboard() {
   const { sales, targets, loading, error } = useSalesData();
@@ -193,8 +194,17 @@ export default function ExecutiveDashboard() {
                 Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)}
               </p>
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold">
-              <label className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-semibold">
                 Tahun A
                 <select
                   value={tahunA ?? ''}
@@ -204,7 +214,7 @@ export default function ExecutiveDashboard() {
                   {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
               </label>
-              <label className="flex items-center gap-1.5">
+              <label className="flex items-center gap-1.5 text-xs font-semibold">
                 Tahun B
                 <select
                   value={tahunB ?? ''}
