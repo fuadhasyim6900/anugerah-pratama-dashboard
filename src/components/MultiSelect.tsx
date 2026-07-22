@@ -49,9 +49,9 @@ export default function MultiSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-2 text-sm rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
+        className="w-full flex items-center justify-between gap-2 text-sm rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-3 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
       >
-        <span className="truncate text-left">{displayText}</span>
+        <span className="truncate text-left leading-6">{displayText}</span>
         <ChevronDown size={14} className={clsx('shrink-0 transition-transform text-ink-400', open && 'rotate-180')} />
       </button>
 

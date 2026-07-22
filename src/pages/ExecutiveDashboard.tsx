@@ -1,10 +1,11 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Wallet, Target, Store, Gauge, Percent, Package } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
 import LineChartCard from '../components/charts/LineChartCard';
 import MultiSelect from '../components/MultiSelect';
+import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
@@ -133,6 +134,13 @@ export default function ExecutiveDashboard() {
     return { rows, grandTotal: { supplier: 'Grand Total', omset: grandOmset, ao: grandAO } };
   }, [aoSupplierAll, supplierFilter]);
 
+  const targetVsRealisasiRef = useRef<HTMLDivElement>(null);
+  const trenOmsetRef = useRef<HTMLDivElement>(null);
+  const omsetPerKotaRef = useRef<HTMLDivElement>(null);
+  const omsetPerDepoRef = useRef<HTMLDivElement>(null);
+  const perbandinganBulananRef = useRef<HTMLDivElement>(null);
+  const aoSupplierRef = useRef<HTMLDivElement>(null);
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
@@ -158,8 +166,11 @@ export default function ExecutiveDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Target vs Realisasi</h3>
+          <div className="card p-5" ref={targetVsRealisasiRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Target vs Realisasi</h3>
+              <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
             <BarChartCard
               data={targetVsRealisasi}
@@ -171,8 +182,11 @@ export default function ExecutiveDashboard() {
             />
           </div>
 
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Tren Omset Bulanan</h3>
+          <div className="card p-5" ref={trenOmsetRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Tren Omset Bulanan</h3>
+              <ExportMenu targetRef={trenOmsetRef} filename="tren-omset-bulanan" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {tahunLabel(filters.tahun)}</p>
             <LineChartCard
               data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
@@ -181,8 +195,11 @@ export default function ExecutiveDashboard() {
             />
           </div>
 
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Omset per Kota</h3>
+          <div className="card p-5" ref={omsetPerKotaRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Omset per Kota</h3>
+              <ExportMenu targetRef={omsetPerKotaRef} filename="omset-per-kota" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">10 kota dengan kontribusi penjualan tertinggi</p>
             <BarChartCard
               data={omsetPerKota.map((k) => ({ label: k.label, Omset: k.value }))}
@@ -193,8 +210,11 @@ export default function ExecutiveDashboard() {
             />
           </div>
 
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Omset per Depo</h3>
+          <div className="card p-5" ref={omsetPerDepoRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Omset per Depo</h3>
+              <ExportMenu targetRef={omsetPerDepoRef} filename="omset-per-depo" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">Distribusi penjualan di setiap depo</p>
             <BarChartCard
               data={omsetPerDepo.map((k) => ({ label: k.label, Omset: k.value }))}
@@ -206,7 +226,7 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-5" ref={perbandinganBulananRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
             <div>
               <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
@@ -244,6 +264,7 @@ export default function ExecutiveDashboard() {
                   {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
               </label>
+              <ExportMenu targetRef={perbandinganBulananRef} filename="rincian-perbandingan-bulanan" />
             </div>
           </div>
 
@@ -296,7 +317,7 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-5" ref={aoSupplierRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">AO Persupplier</h3>
@@ -332,6 +353,7 @@ export default function ExecutiveDashboard() {
                   allLabel="Semua Tahun"
                 />
               </div>
+              <ExportMenu targetRef={aoSupplierRef} filename="ao-persupplier" />
             </div>
           </div>
 

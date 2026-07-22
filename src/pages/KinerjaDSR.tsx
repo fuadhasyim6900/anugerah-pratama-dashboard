@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
 import MultiSelect from '../components/MultiSelect';
+import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
@@ -96,9 +97,17 @@ export default function KinerjaDSR() {
     setCompareDSR((prev) => prev.filter((d) => dsrOptionsForCompare.includes(d)));
   }, [dsrOptionsForCompare]);
 
+  // Independent month filters for each side of the comparison (Tahun A / Tahun
+  // B), so e.g. "Jan-Jun Tahun A" can be compared against "Jan-Des Tahun B".
+  // Empty selection = all 12 months for that side.
+  const [cmpBulanA, setCmpBulanA] = useState<number[]>([]);
+  const [cmpBulanB, setCmpBulanB] = useState<number[]>([]);
+  const ALL_MONTHS = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
+  const cmpBulanAEffective = cmpBulanA.length ? cmpBulanA : ALL_MONTHS;
+  const cmpBulanBEffective = cmpBulanB.length ? cmpBulanB : ALL_MONTHS;
   const cmpMonthsToShow = useMemo(
-    () => (filters.bulan.length ? [...filters.bulan].sort((a, b) => a - b) : Array.from({ length: 12 }, (_, i) => i + 1)),
-    [filters.bulan]
+    () => Array.from(new Set([...cmpBulanAEffective, ...cmpBulanBEffective])).sort((a, b) => a - b),
+    [cmpBulanAEffective, cmpBulanBEffective]
   );
 
   const dsrSalesComparison = useMemo(() => {
@@ -111,8 +120,10 @@ export default function KinerjaDSR() {
 
     const rows = cmpMonthsToShow.map((monthNum) => {
       const label = MONTH_NAMES_ID[monthNum - 1];
-      const aRows = rowsA.filter((r) => r.monthNum === monthNum);
-      const bRows = rowsB.filter((r) => r.monthNum === monthNum);
+      const inA = cmpBulanAEffective.includes(monthNum);
+      const inB = cmpBulanBEffective.includes(monthNum);
+      const aRows = inA ? rowsA.filter((r) => r.monthNum === monthNum) : [];
+      const bRows = inB ? rowsB.filter((r) => r.monthNum === monthNum) : [];
       const salesA = sumNominal(aRows);
       const salesB = sumNominal(bRows);
       const aoA = distinctCount(aRows, 'kdGrup');
@@ -120,14 +131,15 @@ export default function KinerjaDSR() {
       return {
         bulan: label,
         salesA, salesB,
-        salesGrowth: pctChange(salesB, salesA),
+        salesGrowth: inA && inB ? pctChange(salesB, salesA) : null,
         aoA, aoB,
-        aoGrowth: pctChange(aoB, aoA),
+        aoGrowth: inA && inB ? pctChange(aoB, aoA) : null,
+        inA, inB,
       };
     });
 
-    const rowsAInScope = rowsA.filter((r) => cmpMonthsToShow.includes(r.monthNum));
-    const rowsBInScope = rowsB.filter((r) => cmpMonthsToShow.includes(r.monthNum));
+    const rowsAInScope = rowsA.filter((r) => cmpBulanAEffective.includes(r.monthNum));
+    const rowsBInScope = rowsB.filter((r) => cmpBulanBEffective.includes(r.monthNum));
     const grandSalesA = sumNominal(rowsAInScope);
     const grandSalesB = sumNominal(rowsBInScope);
     const grandAoA = distinctCount(rowsAInScope, 'kdGrup');
@@ -142,7 +154,7 @@ export default function KinerjaDSR() {
         aoGrowth: pctChange(grandAoB, grandAoA),
       },
     };
-  }, [sales, filters.depo, cmpMonthsToShow, cmpTahunA, cmpTahunB, compareDSR]);
+  }, [sales, filters.depo, cmpMonthsToShow, cmpBulanAEffective, cmpBulanBEffective, cmpTahunA, cmpTahunB, compareDSR]);
 
   const cmpTahunALabel = cmpTahunA.length ? [...cmpTahunA].sort((a, b) => a - b).join('+') : '-';
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
@@ -171,6 +183,12 @@ export default function KinerjaDSR() {
     [sales, targets, filters.depo, filters.bulan, filters.tahun, targetDSRFilter, targetSuppFilter]
   );
 
+  const rankingChartRef = useRef<HTMLDivElement>(null);
+  const aoChartRef = useRef<HTMLDivElement>(null);
+  const supplierBreakdownRef = useRef<HTMLDivElement>(null);
+  const dsrComparisonRef = useRef<HTMLDivElement>(null);
+  const targetVsOmsetRef = useRef<HTMLDivElement>(null);
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
@@ -190,8 +208,11 @@ export default function KinerjaDSR() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">Peringkat Penjualan DSR</h3>
+          <div className="card p-5" ref={rankingChartRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Peringkat Penjualan DSR</h3>
+              <ExportMenu targetRef={rankingChartRef} filename="peringkat-penjualan-dsr" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">Total Penjualan DSR Periode {periodLabel} (Aktual)</p>
             <BarChartCard
               data={ranking.map((r) => ({ dsr: r.dsr, Omset: r.nominal }))}
@@ -202,8 +223,11 @@ export default function KinerjaDSR() {
             />
           </div>
 
-          <div className="card p-5">
-            <h3 className="font-bold text-sm mb-1">{aoChartTitle}</h3>
+          <div className="card p-5" ref={aoChartRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">{aoChartTitle}</h3>
+              <ExportMenu targetRef={aoChartRef} filename="ao-dsr" />
+            </div>
             <p className="text-xs text-ink-400 mb-3">{aoChartDesc}</p>
             <BarChartCard
               data={avgAO.map((r) => ({ dsr: r.dsr, AO: r.avgAo }))}
@@ -250,7 +274,7 @@ export default function KinerjaDSR() {
             </div>
           </div>
 
-          <div className="card p-5">
+          <div className="card p-5" ref={supplierBreakdownRef}>
             <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
               <div>
                 <h3 className="font-bold text-sm">Distribusi Produk / Supplier DSR</h3>
@@ -258,15 +282,18 @@ export default function KinerjaDSR() {
                 <p className="text-lg font-extrabold mt-1">DSR: {selectedDSR ?? '-'}</p>
               </div>
 
-              <div className="flex gap-6">
-                <div className="text-right">
-                  <p className="text-xs text-ink-400 font-semibold">Total Sales ({periodLabel})</p>
-                  <p className="text-xl font-extrabold text-brand-600">{formatRupiah(dsrTotal)}</p>
+              <div className="flex items-start gap-4">
+                <div className="flex gap-6">
+                  <div className="text-right">
+                    <p className="text-xs text-ink-400 font-semibold">Total Sales ({periodLabel})</p>
+                    <p className="text-xl font-extrabold text-brand-600">{formatRupiah(dsrTotal)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-ink-400 font-semibold">{aoDetailLabel}</p>
+                    <p className="text-xl font-extrabold">{formatNumber(dsrAvgAO)} Outlet</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-ink-400 font-semibold">{aoDetailLabel}</p>
-                  <p className="text-xl font-extrabold">{formatNumber(dsrAvgAO)} Outlet</p>
-                </div>
+                <ExportMenu targetRef={supplierBreakdownRef} filename="distribusi-produk-supplier-dsr" />
               </div>
             </div>
 
@@ -302,7 +329,7 @@ export default function KinerjaDSR() {
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-5" ref={dsrComparisonRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
@@ -311,15 +338,6 @@ export default function KinerjaDSR() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
-              <div className="w-full sm:w-44">
-                <MultiSelect
-                  label="Bulan"
-                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-                  selected={filters.bulan.map(String)}
-                  onChange={(v) => filters.setBulan(v.map(Number))}
-                  allLabel="Semua Bulan (YTD)"
-                />
-              </div>
               <div className="w-full sm:w-36">
                 <MultiSelect
                   label="Tahun A"
@@ -327,6 +345,15 @@ export default function KinerjaDSR() {
                   selected={cmpTahunA.map(String)}
                   onChange={(v) => setCmpTahunA(v.map(Number))}
                   allLabel="Pilih Tahun A"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan Tahun A"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={cmpBulanA.map(String)}
+                  onChange={(v) => setCmpBulanA(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
                 />
               </div>
               <div className="w-full sm:w-36">
@@ -338,6 +365,15 @@ export default function KinerjaDSR() {
                   allLabel="Pilih Tahun B"
                 />
               </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan Tahun B"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={cmpBulanB.map(String)}
+                  onChange={(v) => setCmpBulanB(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
               <div className="w-full sm:w-48">
                 <MultiSelect
                   label="Nama DSR"
@@ -347,6 +383,7 @@ export default function KinerjaDSR() {
                   allLabel="Semua DSR"
                 />
               </div>
+              <ExportMenu targetRef={dsrComparisonRef} filename="perbandingan-sales-dsr" />
             </div>
           </div>
 
@@ -367,13 +404,13 @@ export default function KinerjaDSR() {
                 {dsrSalesComparison.rows.map((m) => (
                   <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
                     <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
-                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesA)}</td>
-                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesB)}</td>
+                    <td className="py-2 pr-3 text-right">{m.inA ? formatRupiah(m.salesA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right">{m.inB ? formatRupiah(m.salesB) : '-'}</td>
                     <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
                     </td>
-                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoA)}</td>
-                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoB)}</td>
+                    <td className="py-2 pr-3 text-right">{m.inA ? formatNumber(m.aoA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right">{m.inB ? formatNumber(m.aoB) : '-'}</td>
                     <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
                     </td>
@@ -402,7 +439,7 @@ export default function KinerjaDSR() {
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-5" ref={targetVsOmsetRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">Tabel Target vs Omset per Supplier</h3>
@@ -429,6 +466,7 @@ export default function KinerjaDSR() {
                   allLabel="Semua DSR"
                 />
               </div>
+              <ExportMenu targetRef={targetVsOmsetRef} filename="target-vs-omset-per-supplier" />
             </div>
           </div>
 
@@ -439,9 +477,9 @@ export default function KinerjaDSR() {
                   <th className="py-2 pr-3">Supplier</th>
                   <th className="py-2 pr-3 text-right">Target</th>
                   <th className="py-2 pr-3 text-right">Omset</th>
-                  <th className="py-2 pr-3 text-right">Kekurangan</th>
                   <th className="py-2 pr-3 text-right">Pencapaian (%)</th>
                   <th className="py-2 pr-3 text-right">Jumlah AO</th>
+                  <th className="py-2 pr-3 text-right">Kekurangan</th>
                 </tr>
               </thead>
               <tbody>
@@ -452,13 +490,13 @@ export default function KinerjaDSR() {
                       <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
                       <td className="py-2 pr-3 text-right">{formatRupiah(r.target)}</td>
                       <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
-                      <td className={`py-2 pr-3 text-right font-semibold ${r.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                        {formatRupiah(r.kekurangan)}
-                      </td>
-                      <td className={`py-2 pr-3 text-right font-semibold ${pencapaianPct === null ? 'text-ink-400' : pencapaianPct >= 100 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      <td className="py-2 pr-3 text-right font-semibold text-ink-900 dark:text-ink-100">
                         {pencapaianPct === null ? '-' : `${pencapaianPct.toFixed(1)}%`}
                       </td>
                       <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
+                      <td className={`py-2 pr-3 text-right font-semibold ${r.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                        {formatRupiah(r.kekurangan)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -474,13 +512,13 @@ export default function KinerjaDSR() {
                       <td className="py-2.5 pr-3">Grand Total</td>
                       <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.target)}</td>
                       <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.omset)}</td>
-                      <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                        {formatRupiah(targetVsOmset.grandTotal.kekurangan)}
-                      </td>
-                      <td className={`py-2.5 pr-3 text-right ${grandPencapaianPct === null ? 'text-ink-400' : grandPencapaianPct >= 100 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      <td className="py-2.5 pr-3 text-right text-ink-900 dark:text-ink-100">
                         {grandPencapaianPct === null ? '-' : `${grandPencapaianPct.toFixed(1)}%`}
                       </td>
                       <td className="py-2.5 pr-3 text-right">{formatNumber(targetVsOmset.grandTotal.ao)}</td>
+                      <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                        {formatRupiah(targetVsOmset.grandTotal.kekurangan)}
+                      </td>
                     </tr>
                   );
                 })()}

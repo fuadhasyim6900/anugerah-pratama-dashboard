@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import TopBar from '../components/TopBar';
 import LineChartCard from '../components/charts/LineChartCard';
+import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import { applyFilters, formatRupiah, depoLabel, primaryYear } from '../lib/aggregate';
@@ -84,6 +85,9 @@ export default function ProyeksiS2() {
     { id: 'target5', label: 'Target (+5.00%)' },
     { id: 'target10', label: 'Target (+10.00%)' },
   ];
+
+  const trenChartRef = useRef<HTMLDivElement>(null);
+  const rincianTableRef = useRef<HTMLDivElement>(null);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -194,8 +198,11 @@ export default function ProyeksiS2() {
           )}
         </div>
 
-        <div className="card p-5">
-          <h3 className="font-bold text-sm mb-1">Grafik Tren Penjualan {periodLabel} ({currentYear - 1} vs {currentYear} Proyeksi)</h3>
+        <div className="card p-5" ref={trenChartRef}>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h3 className="font-bold text-sm">Grafik Tren Penjualan {periodLabel} ({currentYear - 1} vs {currentYear} Proyeksi)</h3>
+            <ExportMenu targetRef={trenChartRef} filename="tren-penjualan-proyeksi" />
+          </div>
           <p className="text-xs text-ink-400 mb-3">
             Membandingkan realisasi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {currentYear - 1} dengan proyeksi {MONTH_NAMES_ID[monthRange[0] - 1]} - {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]} {currentYear}
           </p>
@@ -209,8 +216,11 @@ export default function ProyeksiS2() {
           />
         </div>
 
-        <div className="card p-5">
-          <h3 className="font-bold text-sm mb-1">Rincian Bulanan Proyeksi {periodLabel} ({currentYear} vs {currentYear - 1})</h3>
+        <div className="card p-5" ref={rincianTableRef}>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h3 className="font-bold text-sm">Rincian Bulanan Proyeksi {periodLabel} ({currentYear} vs {currentYear - 1})</h3>
+            <ExportMenu targetRef={rincianTableRef} filename="rincian-bulanan-proyeksi" />
+          </div>
           <p className="text-xs text-ink-400 mb-3">
             Mencakup bulan {MONTH_NAMES_ID[monthRange[0] - 1]} hingga {MONTH_NAMES_ID[monthRange[monthRange.length - 1] - 1]}
           </p>
