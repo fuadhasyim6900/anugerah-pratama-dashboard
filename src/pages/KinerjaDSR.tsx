@@ -148,18 +148,27 @@ export default function KinerjaDSR() {
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
-  // Own "Nama DSR" filter (multi-select, default = semua DSR). The main
-  // Depo/Bulan/Tahun filters from the sidebar still apply on top of this.
+  // Own "Nama DSR" and "Supplier" filters (multi-select, default = semua).
+  // The main Depo/Bulan/Tahun filters from the sidebar still apply on top.
   const [targetDSRFilter, setTargetDSRFilter] = useState<string[]>([]);
   useEffect(() => {
     setTargetDSRFilter((prev) => prev.filter((d) => dsrOptionsForCompare.includes(d)));
   }, [dsrOptionsForCompare]);
 
+  const suppOptionsForTarget = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.supp).filter(Boolean))).sort(),
+    [filtered]
+  );
+  const [targetSuppFilter, setTargetSuppFilter] = useState<string[]>([]);
+  useEffect(() => {
+    setTargetSuppFilter((prev) => prev.filter((s) => suppOptionsForTarget.includes(s)));
+  }, [suppOptionsForTarget]);
+
   const targetVsOmset = useMemo(
     () => targetVsOmsetBySupplier(sales, targets, {
-      depo: filters.depo, bulan: filters.bulan, tahun: filters.tahun, dsr: targetDSRFilter,
+      depo: filters.depo, bulan: filters.bulan, tahun: filters.tahun, dsr: targetDSRFilter, supp: targetSuppFilter,
     }),
-    [sales, targets, filters.depo, filters.bulan, filters.tahun, targetDSRFilter]
+    [sales, targets, filters.depo, filters.bulan, filters.tahun, targetDSRFilter, targetSuppFilter]
   );
 
   if (loading) return <LoadingState />;
@@ -401,14 +410,25 @@ export default function KinerjaDSR() {
                 Perbandingan target dan realisasi omset DSR per supplier · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
               </p>
             </div>
-            <div className="w-full sm:w-56">
-              <MultiSelect
-                label="Nama DSR"
-                options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
-                selected={targetDSRFilter}
-                onChange={setTargetDSRFilter}
-                allLabel="Semua DSR"
-              />
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={suppOptionsForTarget.map((s) => ({ value: s, label: s }))}
+                  selected={targetSuppFilter}
+                  onChange={setTargetSuppFilter}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-56">
+                <MultiSelect
+                  label="Nama DSR"
+                  options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
+                  selected={targetDSRFilter}
+                  onChange={setTargetDSRFilter}
+                  allLabel="Semua DSR"
+                />
+              </div>
             </div>
           </div>
 
@@ -420,44 +440,55 @@ export default function KinerjaDSR() {
                   <th className="py-2 pr-3 text-right">Target</th>
                   <th className="py-2 pr-3 text-right">Omset</th>
                   <th className="py-2 pr-3 text-right">Kekurangan</th>
-                  <th className="py-2 pr-3 text-right">Kekurangan (%)</th>
+                  <th className="py-2 pr-3 text-right">Pencapaian (%)</th>
+                  <th className="py-2 pr-3 text-right">Jumlah AO</th>
                 </tr>
               </thead>
               <tbody>
-                {targetVsOmset.rows.map((r) => (
-                  <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
-                    <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
-                    <td className="py-2 pr-3 text-right">{formatRupiah(r.target)}</td>
-                    <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
-                    <td className={`py-2 pr-3 text-right font-semibold ${r.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {formatRupiah(r.kekurangan)}
-                    </td>
-                    <td className={`py-2 pr-3 text-right font-semibold ${r.kekuranganPct === null ? 'text-ink-400' : r.kekuranganPct > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {r.kekuranganPct === null ? '-' : `${r.kekuranganPct > 0 ? '' : ''}${r.kekuranganPct.toFixed(1)}%`}
-                    </td>
-                  </tr>
-                ))}
+                {targetVsOmset.rows.map((r) => {
+                  const pencapaianPct = r.target ? (r.omset / r.target) * 100 : null;
+                  return (
+                    <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
+                      <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
+                      <td className="py-2 pr-3 text-right">{formatRupiah(r.target)}</td>
+                      <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
+                      <td className={`py-2 pr-3 text-right font-semibold ${r.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                        {formatRupiah(r.kekurangan)}
+                      </td>
+                      <td className={`py-2 pr-3 text-right font-semibold ${pencapaianPct === null ? 'text-ink-400' : pencapaianPct >= 100 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                        {pencapaianPct === null ? '-' : `${pencapaianPct.toFixed(1)}%`}
+                      </td>
+                      <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
+                    </tr>
+                  );
+                })}
                 {targetVsOmset.rows.length === 0 && (
-                  <tr><td colSpan={5} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                  <tr><td colSpan={6} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
                 )}
-                {targetVsOmset.rows.length > 0 && (
-                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
-                    <td className="py-2.5 pr-3">Grand Total</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.target)}</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.omset)}</td>
-                    <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {formatRupiah(targetVsOmset.grandTotal.kekurangan)}
-                    </td>
-                    <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekuranganPct === null ? 'text-ink-400' : targetVsOmset.grandTotal.kekuranganPct > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
-                      {targetVsOmset.grandTotal.kekuranganPct === null ? '-' : `${targetVsOmset.grandTotal.kekuranganPct.toFixed(1)}%`}
-                    </td>
-                  </tr>
-                )}
+                {targetVsOmset.rows.length > 0 && (() => {
+                  const grandPencapaianPct = targetVsOmset.grandTotal.target
+                    ? (targetVsOmset.grandTotal.omset / targetVsOmset.grandTotal.target) * 100
+                    : null;
+                  return (
+                    <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                      <td className="py-2.5 pr-3">Grand Total</td>
+                      <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.target)}</td>
+                      <td className="py-2.5 pr-3 text-right">{formatRupiah(targetVsOmset.grandTotal.omset)}</td>
+                      <td className={`py-2.5 pr-3 text-right ${targetVsOmset.grandTotal.kekurangan > 0 ? 'text-brand-600' : 'text-emerald-600'}`}>
+                        {formatRupiah(targetVsOmset.grandTotal.kekurangan)}
+                      </td>
+                      <td className={`py-2.5 pr-3 text-right ${grandPencapaianPct === null ? 'text-ink-400' : grandPencapaianPct >= 100 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                        {grandPencapaianPct === null ? '-' : `${grandPencapaianPct.toFixed(1)}%`}
+                      </td>
+                      <td className="py-2.5 pr-3 text-right">{formatNumber(targetVsOmset.grandTotal.ao)}</td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
           <p className="text-[11px] text-ink-400 mt-3">
-            Kekurangan = Target − Omset. Nilai merah berarti omset belum mencapai target; nilai hijau berarti omset sudah mencapai atau melampaui target.
+            Kekurangan = Target − Omset. Pencapaian (%) = Omset ÷ Target × 100%. Nilai merah berarti omset belum mencapai target (pencapaian di bawah 100%); nilai hijau berarti omset sudah mencapai atau melampaui target (pencapaian 100% atau lebih). Jumlah AO dihitung per kombinasi Supplier &amp; KD Grup.
           </p>
         </div>
       </div>

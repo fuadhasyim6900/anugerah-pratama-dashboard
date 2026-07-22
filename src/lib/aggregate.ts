@@ -179,6 +179,36 @@ export function supplierBreakdownForDSR(rows: SalesRow[], dsr: string) {
   }));
 }
 
+export interface SupplierAORow {
+  supplier: string;
+  omset: number;
+  ao: number;
+}
+
+// Groups rows by SUPP. AO per supplier is a distinct count of KD GRUP within
+// that supplier's rows only (i.e. the unique key is effectively
+// "SUPP_&_KD GRUP"), so a customer buying from several suppliers counts as
+// one AO under each supplier separately.
+export function aoPerSupplier(rows: SalesRow[]): { rows: SupplierAORow[]; grandTotal: SupplierAORow } {
+  const map = new Map<string, { omset: number; ao: Set<string> }>();
+  for (const r of rows) {
+    const key = r.supp || '(Kosong)';
+    if (!map.has(key)) map.set(key, { omset: 0, ao: new Set() });
+    const entry = map.get(key)!;
+    entry.omset += r.nominal;
+    entry.ao.add(r.kdGrup);
+  }
+  const rowsOut = Array.from(map.entries())
+    .map(([supplier, v]) => ({ supplier, omset: v.omset, ao: v.ao.size }))
+    .sort((a, b) => b.omset - a.omset);
+  const grandOmset = rowsOut.reduce((a, r) => a + r.omset, 0);
+  const grandAO = rowsOut.reduce((a, r) => a + r.ao, 0);
+  return {
+    rows: rowsOut,
+    grandTotal: { supplier: 'Grand Total', omset: grandOmset, ao: grandAO },
+  };
+}
+
 export function pctChange(current: number, previous: number): number | null {
   if (!previous) return null;
   return ((current - previous) / previous) * 100;
@@ -190,6 +220,7 @@ export interface SupplierTargetRow {
   omset: number;
   kekurangan: number;          // target - omset (positive = shortfall, negative = exceeded target)
   kekuranganPct: number | null; // kekurangan as % of target, null when target is 0
+  ao: number;                   // distinct AO (KD GRUP) count for this supplier
 }
 
 // Per-supplier comparison of target (from DATA_TARGET_FUAD, matched by DSR
@@ -199,17 +230,19 @@ export interface SupplierTargetRow {
 export function targetVsOmsetBySupplier(
   sales: SalesRow[],
   targets: TargetRow[],
-  opts: { depo: string[]; bulan: number[]; tahun: number[]; dsr: string[] }
+  opts: { depo: string[]; bulan: number[]; tahun: number[]; dsr: string[]; supp?: string[] }
 ): { rows: SupplierTargetRow[]; grandTotal: SupplierTargetRow } {
   const monthIdxs = (opts.bulan.length ? opts.bulan : Array.from({ length: 12 }, (_, i) => i + 1))
     .map((m) => m - 1)
     .filter((i) => i >= 0 && i <= 11);
   const dsrSet = new Set(opts.dsr.map((d) => d.trim().toUpperCase()));
+  const suppSet = new Set((opts.supp || []).map((s) => s.trim().toUpperCase()));
 
   const filteredTargets = targets.filter((t) => {
     if (opts.depo.length && !opts.depo.includes(t.depo)) return false;
     if (opts.tahun.length && !opts.tahun.includes(t.tahun)) return false;
     if (dsrSet.size && !dsrSet.has(t.namaSalesman.trim().toUpperCase())) return false;
+    if (suppSet.size && !suppSet.has(t.supplier.trim().toUpperCase())) return false;
     return true;
   });
 
@@ -218,23 +251,25 @@ export function targetVsOmsetBySupplier(
     if (opts.bulan.length && !opts.bulan.includes(r.monthNum)) return false;
     if (opts.tahun.length && !opts.tahun.includes(r.tahun)) return false;
     if (dsrSet.size && !dsrSet.has(r.sales.trim().toUpperCase())) return false;
+    if (suppSet.size && !suppSet.has(r.supp.trim().toUpperCase())) return false;
     return true;
   });
 
-  const map = new Map<string, { target: number; omset: number }>();
+  const map = new Map<string, { target: number; omset: number; ao: Set<string> }>();
 
   for (const t of filteredTargets) {
     const key = t.supplier.trim().toUpperCase() || '(Kosong)';
     const sum = monthIdxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0);
-    const entry = map.get(key) || { target: 0, omset: 0 };
+    const entry = map.get(key) || { target: 0, omset: 0, ao: new Set<string>() };
     entry.target += sum;
     map.set(key, entry);
   }
 
   for (const r of filteredSales) {
     const key = r.supp.trim().toUpperCase() || '(Kosong)';
-    const entry = map.get(key) || { target: 0, omset: 0 };
+    const entry = map.get(key) || { target: 0, omset: 0, ao: new Set<string>() };
     entry.omset += r.nominal;
+    entry.ao.add(r.kdGrup);
     map.set(key, entry);
   }
 
@@ -247,6 +282,7 @@ export function targetVsOmsetBySupplier(
         omset: v.omset,
         kekurangan,
         kekuranganPct: v.target ? (kekurangan / v.target) * 100 : null,
+        ao: v.ao.size,
       };
     })
     .sort((a, b) => b.target - a.target);
@@ -254,6 +290,7 @@ export function targetVsOmsetBySupplier(
   const grandTarget = rows.reduce((a, r) => a + r.target, 0);
   const grandOmset = rows.reduce((a, r) => a + r.omset, 0);
   const grandKekurangan = grandTarget - grandOmset;
+  const grandAO = rows.reduce((a, r) => a + r.ao, 0);
 
   return {
     rows,
@@ -263,6 +300,7 @@ export function targetVsOmsetBySupplier(
       omset: grandOmset,
       kekurangan: grandKekurangan,
       kekuranganPct: grandTarget ? (grandKekurangan / grandTarget) * 100 : null,
+      ao: grandAO,
     },
   };
 }

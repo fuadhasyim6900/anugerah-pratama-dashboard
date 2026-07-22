@@ -24,14 +24,27 @@ export default function Sidebar() {
   const depoList = DEPO_LIST_EXCLUDING_ADMIN(sales);
   const years = Array.from(new Set(sales.map((r) => r.tahun))).sort();
 
-  // Default to the latest available year the first time data loads, so the
-  // dashboard opens on a sensible period instead of "semua tahun".
+  // Default to the current running month & year the first time data loads
+  // (e.g. Juli 2026), so the dashboard opens already filtered to "today".
+  // Falls back to just the latest available year (all months) if the
+  // current month isn't in the data yet.
   useEffect(() => {
-    if (years.length && tahun.length === 0) {
-      setTahun([years[years.length - 1]]);
+    if (years.length && tahun.length === 0 && bulan.length === 0) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      const hasCurrentPeriod = sales.some(
+        (r) => r.tahun === currentYear && r.monthNum === currentMonth
+      );
+      if (hasCurrentPeriod) {
+        setTahun([currentYear]);
+        setBulan([currentMonth]);
+      } else {
+        setTahun([years[years.length - 1]]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join(',')]);
+  }, [years.join(','), sales.length]);
 
   const { sidebarCollapsed, mobileNavOpen, setMobileNavOpen } = useUIStore();
 

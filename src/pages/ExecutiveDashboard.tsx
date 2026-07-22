@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Wallet, Target, Store, Gauge, Percent } from 'lucide-react';
+import { Wallet, Target, Store, Gauge, Percent, Package } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
@@ -10,7 +10,7 @@ import { useFilterStore } from '../store/filters';
 import {
   applyFilters, sumNominal, distinctCount, sumTarget, groupSumBy, trendByMonth,
   formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
-  pctChange, depoLabel, bulanLabel, tahunLabel,
+  pctChange, depoLabel, bulanLabel, tahunLabel, aoPerSupplier,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 
@@ -114,6 +114,25 @@ export default function ExecutiveDashboard() {
     };
   }, [sales, filters.depo, monthsToShow, tahunA, tahunB]);
 
+  // --- Tabel AO Persupplier --------------------------------------------
+  // Bulan & Tahun here are bound directly to the main sidebar filter store,
+  // so changing them here also updates the sidebar (and every other card on
+  // this page). Supplier (SUPP) is a local filter scoped to this table only.
+  const aoSupplierAll = useMemo(() => aoPerSupplier(filtered), [filtered]);
+  const [supplierFilter, setSupplierFilter] = useState<string[]>([]);
+  const supplierOptions = useMemo(() => aoSupplierAll.rows.map((r) => r.supplier), [aoSupplierAll]);
+  useEffect(() => {
+    setSupplierFilter((prev) => prev.filter((s) => supplierOptions.includes(s)));
+  }, [supplierOptions]);
+
+  const aoSupplierTable = useMemo(() => {
+    if (!supplierFilter.length) return aoSupplierAll;
+    const rows = aoSupplierAll.rows.filter((r) => supplierFilter.includes(r.supplier));
+    const grandOmset = rows.reduce((a, r) => a + r.omset, 0);
+    const grandAO = rows.reduce((a, r) => a + r.ao, 0);
+    return { rows, grandTotal: { supplier: 'Grand Total', omset: grandOmset, ao: grandAO } };
+  }, [aoSupplierAll, supplierFilter]);
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
@@ -128,6 +147,7 @@ export default function ExecutiveDashboard() {
           <KpiCard label="Total Omset" value={formatRupiah(totalOmset)} icon={Wallet} />
           <KpiCard label="Target Omset" value={formatRupiah(totalTarget)} icon={Target} />
           <KpiCard label="Total Active Outlet" value={`${formatNumber(totalAO)} Outlet`} icon={Store} />
+          <KpiCard label="Total AO per Supplier" value={`${formatNumber(aoSupplierAll.grandTotal.ao)} AO`} icon={Package} />
           <KpiCard label="Rata-rata Omset / AO" value={formatRupiah(avgOmsetPerAO)} icon={Gauge} />
           <KpiCard
             label="Persentase Pencapaian"
@@ -274,6 +294,80 @@ export default function ExecutiveDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">AO Persupplier</h3>
+              <p className="text-xs text-ink-400">
+                Jumlah Active Outlet (AO) &amp; omset per supplier{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={supplierOptions.map((s) => ({ value: s, label: s }))}
+                  selected={supplierFilter}
+                  onChange={setSupplierFilter}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-32">
+                <MultiSelect
+                  label="Tahun"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Supplier</th>
+                  <th className="py-2 pr-3 text-right">Omset</th>
+                  <th className="py-2 pr-3 text-right">Jumlah AO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aoSupplierTable.rows.map((r) => (
+                  <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
+                  </tr>
+                ))}
+                {aoSupplierTable.rows.length === 0 && (
+                  <tr><td colSpan={3} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {aoSupplierTable.rows.length > 0 && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(aoSupplierTable.grandTotal.omset)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(aoSupplierTable.grandTotal.ao)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-ink-400 mt-3">
+            AO dihitung per kombinasi Supplier &amp; KD Grup (satu pelanggan bisa terhitung AO di lebih dari satu supplier).
+          </p>
         </div>
       </div>
     </div>
