@@ -273,7 +273,7 @@ export default function KinerjaDSR() {
             <div className="flex items-center justify-between gap-3 mb-3">
               <p className="text-xs text-ink-400">{aoChartDesc}</p>
               <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
-                Total AO: {formatNumber(totalAODSR)} Outlet
+                Total AO (gabungan per DSR): {formatNumber(totalAODSR)} Outlet
               </p>
             </div>
             <BarChartCard
@@ -284,6 +284,9 @@ export default function KinerjaDSR() {
               valueFormatter={(v) => `${formatNumber(v)} outlet`}
               series={[{ key: 'AO', color: '#b91c1c', name: aoSeriesName }]}
             />
+            <p className="text-[11px] text-ink-400 mt-2">
+              Angka ini adalah jumlah AO tiap DSR dijumlahkan, jadi satu outlet yang dilayani lebih dari satu DSR akan terhitung lebih dari sekali — berbeda dari "Total Active Outlet" di Executive Dashboard yang menghitung outlet unik sekali saja.
+            </p>
           </div>
         </div>
 
