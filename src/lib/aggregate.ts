@@ -209,6 +209,24 @@ export function aoPerSupplier(rows: SalesRow[]): { rows: SupplierAORow[]; grandT
   };
 }
 
+// Sum target nominal for one specific DSR (matched by TargetRow.namaSalesman),
+// across all suppliers, restricted to the given depo/bulan/tahun scope. Used
+// to show "Target" alongside a DSR's actual omset in their breakdown card.
+export function targetForDSR(
+  targets: TargetRow[],
+  opts: { dsr: string; depo: string[]; bulan: number[]; tahun: number[] }
+): number {
+  const monthIdxs = (opts.bulan.length ? opts.bulan : Array.from({ length: 12 }, (_, i) => i + 1))
+    .map((m) => m - 1)
+    .filter((i) => i >= 0 && i <= 11);
+  const dsrKey = opts.dsr.trim().toUpperCase();
+  return targets
+    .filter((t) => t.namaSalesman.trim().toUpperCase() === dsrKey
+      && (opts.depo.length === 0 || opts.depo.includes(t.depo))
+      && (opts.tahun.length === 0 || opts.tahun.includes(t.tahun)))
+    .reduce((acc, t) => acc + monthIdxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0), 0);
+}
+
 export function pctChange(current: number, previous: number): number | null {
   if (!previous) return null;
   return ((current - previous) / previous) * 100;

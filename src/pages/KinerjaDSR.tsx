@@ -10,11 +10,11 @@ import {
   applyFilters, salesByDSR, avgMonthlyAOByDSR, telemarketingContribution,
   supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
-  targetVsOmsetBySupplier,
+  targetVsOmsetBySupplier, targetForDSR, sumTarget, DEPO_LIST_EXCLUDING_ADMIN,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
-import { Phone, Search, Crown } from 'lucide-react';
+import { Phone, Search, Crown, Target, Percent } from 'lucide-react';
 
 export default function KinerjaDSR() {
   const { sales, targets, loading, error } = useSalesData();
@@ -24,6 +24,15 @@ export default function KinerjaDSR() {
   const ranking = useMemo(() => salesByDSR(filtered), [filtered]);
   const avgAO = useMemo(() => avgMonthlyAOByDSR(filtered), [filtered]);
   const totalOmsetAll = useMemo(() => sumNominal(filtered), [filtered]);
+
+  // Total target across all DSR/supplier combined, within the current
+  // Depo/Bulan/Tahun scope — used for the "Target Omset DSR" &
+  // "Persentase Pencapaian DSR" KPI cards.
+  const totalTargetAllDSR = useMemo(
+    () => sumTarget(targets, filters.depo, filters.bulan.length ? filters.bulan : Array.from({ length: 12 }, (_, i) => i + 1), filters.tahun),
+    [targets, filters.depo, filters.bulan, filters.tahun]
+  );
+  const pencapaianAllDSR = totalTargetAllDSR ? (totalOmsetAll / totalTargetAllDSR) * 100 : null;
 
   const dsrTeraktif = ranking[0] ?? null;
   const dsrTeraktifShare = dsrTeraktif && totalOmsetAll ? (dsrTeraktif.nominal / totalOmsetAll) * 100 : 0;
@@ -48,6 +57,25 @@ export default function KinerjaDSR() {
   );
   const dsrTotal = useMemo(() => dsrRows.reduce((a, r) => a + r.nominal, 0), [dsrRows]);
   const dsrAvgAO = useMemo(() => avgAO.find((a) => a.dsr === selectedDSR)?.avgAo ?? 0, [avgAO, selectedDSR]);
+  const dsrTarget = useMemo(
+    () => (selectedDSR ? targetForDSR(targets, { dsr: selectedDSR, depo: filters.depo, bulan: filters.bulan, tahun: filters.tahun }) : 0),
+    [targets, selectedDSR, filters.depo, filters.bulan, filters.tahun]
+  );
+  const dsrPencapaianPct = dsrTarget ? (dsrTotal / dsrTarget) * 100 : null;
+
+  // The depo the selected DSR actually belongs to (from their own sales
+  // rows), used to compare their sales against their whole depo's target —
+  // regardless of what the sidebar Depo filter is currently set to.
+  const dsrDepo = useMemo(() => dsrRows[0]?.depo ?? '', [dsrRows]);
+  const monthsForTarget = useMemo(
+    () => (filters.bulan.length ? filters.bulan : Array.from({ length: 12 }, (_, i) => i + 1)),
+    [filters.bulan]
+  );
+  const depoTargetForDSR = useMemo(
+    () => (dsrDepo ? sumTarget(targets, [dsrDepo], monthsForTarget, filters.tahun) : 0),
+    [targets, dsrDepo, monthsForTarget, filters.tahun]
+  );
+  const depoPencapaianPct = depoTargetForDSR ? (dsrTotal / depoTargetForDSR) * 100 : null;
   const teleContribution = useMemo(() => telemarketingContribution(dsrRows), [dsrRows]);
   const supplierBreakdown = useMemo(
     () => (selectedDSR ? supplierBreakdownForDSR(filtered, selectedDSR) : []),
@@ -74,6 +102,7 @@ export default function KinerjaDSR() {
   // Own Tahun A / Tahun B / Nama DSR filters (all multi-select). The main
   // Bulan & Depo filters from the sidebar still apply on top of these.
   const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+  const depoOptions = useMemo(() => DEPO_LIST_EXCLUDING_ADMIN(sales), [sales]);
   const [cmpTahunA, setCmpTahunA] = useState<number[]>([]);
   const [cmpTahunB, setCmpTahunB] = useState<number[]>([]);
   useEffect(() => {
@@ -196,7 +225,7 @@ export default function KinerjaDSR() {
     <div>
       <TopBar title="Kinerja DSR" subtitle={`${depoLabel(filters.depo)} · Periode ${periodLabel}`} />
       <div id="page-content" className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-5 gap-4">
           <KpiCard
             label="DSR Teraktif"
             value={dsrTeraktif ? dsrTeraktif.dsr : '-'}
@@ -205,6 +234,13 @@ export default function KinerjaDSR() {
           />
           <KpiCard label="Jumlah DSR Aktif" value={`${formatNumber(ranking.length)} DSR`} />
           <KpiCard label="Total Omset Semua DSR" value={formatRupiah(totalOmsetAll)} />
+          <KpiCard label="Target Omset DSR" value={formatRupiah(totalTargetAllDSR)} icon={Target} />
+          <KpiCard
+            label="Persentase Pencapaian DSR"
+            value={pencapaianAllDSR === null ? '-' : `${pencapaianAllDSR.toFixed(1)}%`}
+            icon={Percent}
+            accent={pencapaianAllDSR !== null && pencapaianAllDSR >= 100 ? 'brand' : 'ink'}
+          />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -213,7 +249,12 @@ export default function KinerjaDSR() {
               <h3 className="font-bold text-sm">Peringkat Penjualan DSR</h3>
               <ExportMenu targetRef={rankingChartRef} filename="peringkat-penjualan-dsr" />
             </div>
-            <p className="text-xs text-ink-400 mb-3">Total Penjualan DSR Periode {periodLabel} (Aktual)</p>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs text-ink-400">Total Penjualan DSR Periode {periodLabel} (Aktual)</p>
+              <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
+                Total: {formatRupiah(totalOmsetAll)}
+              </p>
+            </div>
             <BarChartCard
               data={ranking.map((r) => ({ dsr: r.dsr, Omset: r.nominal }))}
               xKey="dsr"
@@ -283,10 +324,30 @@ export default function KinerjaDSR() {
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="flex gap-6">
+                <div className="flex flex-wrap gap-6">
                   <div className="text-right">
                     <p className="text-xs text-ink-400 font-semibold">Total Sales ({periodLabel})</p>
                     <p className="text-xl font-extrabold text-brand-600">{formatRupiah(dsrTotal)}</p>
+                    <p className="text-[11px] text-ink-400 mt-1">Target {selectedDSR ?? '-'}: {formatRupiah(dsrTarget)}</p>
+                    <p className={`text-xs font-bold ${
+                      dsrPencapaianPct === null ? 'text-ink-400'
+                        : dsrPencapaianPct >= 100 ? 'text-emerald-600'
+                        : 'text-brand-600'
+                    }`}>
+                      {dsrPencapaianPct === null ? '-' : `${dsrPencapaianPct.toFixed(1)}% dari target ${selectedDSR ?? '-'}`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-ink-400 font-semibold">Sales {selectedDSR ?? '-'} ({periodLabel})</p>
+                    <p className="text-xl font-extrabold text-brand-600">{formatRupiah(dsrTotal)}</p>
+                    <p className="text-[11px] text-ink-400 mt-1">Target Depo {dsrDepo || '-'}: {formatRupiah(depoTargetForDSR)}</p>
+                    <p className={`text-xs font-bold ${
+                      depoPencapaianPct === null ? 'text-ink-400'
+                        : depoPencapaianPct >= 100 ? 'text-emerald-600'
+                        : 'text-brand-600'
+                    }`}>
+                      {depoPencapaianPct === null ? '-' : `${depoPencapaianPct.toFixed(1)}% dari target Depo ${dsrDepo || '-'}`}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-ink-400 font-semibold">{aoDetailLabel}</p>
@@ -296,6 +357,12 @@ export default function KinerjaDSR() {
                 <ExportMenu targetRef={supplierBreakdownRef} filename="distribusi-produk-supplier-dsr" />
               </div>
             </div>
+
+            {selectedDSR && (
+              <p className="text-[11px] text-ink-400 -mt-2 mb-4">
+                Target {selectedDSR} = target milik {selectedDSR} sendiri. Target Depo {dsrDepo || '-'} = total target seluruh DSR di Depo {dsrDepo || '-'}, keduanya untuk periode {periodLabel}. Kedua persentase dihitung dari sales {selectedDSR} yang sama (Total Sales) dibagi masing-masing target tersebut.
+              </p>
+            )}
 
             <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 text-xs font-semibold w-fit">
               <Phone size={14} /> Kontribusi Omset Telemarketing: {formatRupiah(teleContribution)}
@@ -448,6 +515,15 @@ export default function KinerjaDSR() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Depo"
+                  options={depoOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.depo}
+                  onChange={filters.setDepo}
+                  allLabel="Semua Depo"
+                />
+              </div>
               <div className="w-full sm:w-48">
                 <MultiSelect
                   label="Supplier"

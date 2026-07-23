@@ -33,6 +33,13 @@ export default function ExecutiveDashboard() {
 
   const omsetPerKota = useMemo(() => groupSumBy(filtered, 'kota').slice(0, 10), [filtered]);
   const omsetPerDepo = useMemo(() => groupSumBy(filtered, 'depo'), [filtered]);
+  // Always the grand total across every depo for the selected Bulan/Tahun —
+  // intentionally ignores the Depo filter itself, so picking e.g. "Jepara"
+  // still shows the total for all depo, not just Jepara's own number.
+  const omsetPerDepoTotal = useMemo(
+    () => sumNominal(applyFilters(sales, { ...filters, depo: [] })),
+    [sales, filters]
+  );
   // The monthly trend chart always shows every available month regardless of
   // the Bulan filter, so ignore it here (but keep Depo/Tahun in effect).
   const trend = useMemo(() => trendByMonth(applyFilters(sales, { ...filters, bulan: [] })), [sales, filters]);
@@ -166,35 +173,6 @@ export default function ExecutiveDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card p-5" ref={targetVsRealisasiRef}>
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <h3 className="font-bold text-sm">Target vs Realisasi</h3>
-              <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
-            </div>
-            <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
-            <BarChartCard
-              data={targetVsRealisasi}
-              xKey="bulan"
-              series={[
-                { key: 'Target', color: '#d9d9de', name: 'Target' },
-                { key: 'Realisasi', color: '#dc2626', name: 'Realisasi' },
-              ]}
-            />
-          </div>
-
-          <div className="card p-5" ref={trenOmsetRef}>
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <h3 className="font-bold text-sm">Tren Omset Bulanan</h3>
-              <ExportMenu targetRef={trenOmsetRef} filename="tren-omset-bulanan" />
-            </div>
-            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {tahunLabel(filters.tahun)}</p>
-            <LineChartCard
-              data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
-              xKey="bulan"
-              series={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
-            />
-          </div>
-
           <div className="card p-5" ref={omsetPerKotaRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Omset per Kota</h3>
@@ -215,7 +193,12 @@ export default function ExecutiveDashboard() {
               <h3 className="font-bold text-sm">Omset per Depo</h3>
               <ExportMenu targetRef={omsetPerDepoRef} filename="omset-per-depo" />
             </div>
-            <p className="text-xs text-ink-400 mb-3">Distribusi penjualan di setiap depo</p>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs text-ink-400">Distribusi penjualan di setiap depo</p>
+              <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
+                Total Semua Depo: {formatRupiah(omsetPerDepoTotal)}
+              </p>
+            </div>
             <BarChartCard
               data={omsetPerDepo.map((k) => ({ label: k.label, Omset: k.value }))}
               xKey="label"
@@ -390,6 +373,37 @@ export default function ExecutiveDashboard() {
           <p className="text-[11px] text-ink-400 mt-3">
             AO dihitung per kombinasi Supplier &amp; KD Grup (satu pelanggan bisa terhitung AO di lebih dari satu supplier).
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card p-5" ref={targetVsRealisasiRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Target vs Realisasi</h3>
+              <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
+            </div>
+            <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
+            <BarChartCard
+              data={targetVsRealisasi}
+              xKey="bulan"
+              series={[
+                { key: 'Target', color: '#d9d9de', name: 'Target' },
+                { key: 'Realisasi', color: '#dc2626', name: 'Realisasi' },
+              ]}
+            />
+          </div>
+
+          <div className="card p-5" ref={trenOmsetRef}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <h3 className="font-bold text-sm">Tren Omset Bulanan</h3>
+              <ExportMenu targetRef={trenOmsetRef} filename="tren-omset-bulanan" />
+            </div>
+            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {tahunLabel(filters.tahun)}</p>
+            <LineChartCard
+              data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
+              xKey="bulan"
+              series={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
+            />
+          </div>
         </div>
       </div>
     </div>
