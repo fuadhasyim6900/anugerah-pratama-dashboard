@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import BottomNav from './components/BottomNav';
 import ExecutiveDashboard from './pages/ExecutiveDashboard';
 import KinerjaDSR from './pages/KinerjaDSR';
 import ProyeksiS2 from './pages/ProyeksiS2';
@@ -30,7 +31,7 @@ function Layout() {
   return (
     <div className="flex min-h-screen overflow-x-hidden">
       <Sidebar />
-      <main id="app-main" className="flex-1 min-w-0">
+      <main id="app-main" className="flex-1 min-w-0 pb-16 md:pb-0">
         <Routes>
           <Route path="/" element={<ExecutiveDashboard />} />
           <Route path="/kinerja-dsr" element={<KinerjaDSR />} />
@@ -38,6 +39,7 @@ function Layout() {
           <Route path="/review-dsr" element={<ReviewDSR />} />
         </Routes>
       </main>
+      <BottomNav />
     </div>
   );
 }

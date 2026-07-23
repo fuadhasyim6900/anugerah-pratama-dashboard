@@ -5,18 +5,12 @@ import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
 import { DEPO_LIST_EXCLUDING_ADMIN } from '../lib/aggregate';
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
+import { NAV_ITEMS } from '../lib/navItems';
 import MultiSelect from './MultiSelect';
 import clsx from 'clsx';
 import {
-  LayoutDashboard, Users, TrendingUp, ClipboardList, Building2, CalendarDays, CalendarRange, X,
+  Building2, CalendarDays, CalendarRange, X,
 } from 'lucide-react';
-
-const NAV_ITEMS = [
-  { to: '/', label: 'Executive Dashboard', icon: LayoutDashboard },
-  { to: '/kinerja-dsr', label: 'Kinerja DSR', icon: Users },
-  { to: '/proyeksi-s2', label: 'Proyeksi Semester', icon: TrendingUp },
-  { to: '/review-dsr', label: 'Review & Solusi DSR', icon: ClipboardList },
-];
 
 export default function Sidebar() {
   const { depo, bulan, tahun, setDepo, setBulan, setTahun } = useFilterStore();
