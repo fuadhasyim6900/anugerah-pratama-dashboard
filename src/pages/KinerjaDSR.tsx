@@ -36,6 +36,7 @@ export default function KinerjaDSR() {
 
   const dsrTeraktif = ranking[0] ?? null;
   const dsrTeraktifShare = dsrTeraktif && totalOmsetAll ? (dsrTeraktif.nominal / totalOmsetAll) * 100 : 0;
+  const totalAODSR = useMemo(() => avgAO.reduce((a, r) => a + r.avgAo, 0), [avgAO]);
 
   const [search, setSearch] = useState('');
   const filteredRanking = useMemo(
@@ -269,7 +270,12 @@ export default function KinerjaDSR() {
               <h3 className="font-bold text-sm">{aoChartTitle}</h3>
               <ExportMenu targetRef={aoChartRef} filename="ao-dsr" />
             </div>
-            <p className="text-xs text-ink-400 mb-3">{aoChartDesc}</p>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs text-ink-400">{aoChartDesc}</p>
+              <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
+                Total AO: {formatNumber(totalAODSR)} Outlet
+              </p>
+            </div>
             <BarChartCard
               data={avgAO.map((r) => ({ dsr: r.dsr, AO: r.avgAo }))}
               xKey="dsr"
@@ -365,7 +371,13 @@ export default function KinerjaDSR() {
             )}
 
             <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 text-xs font-semibold w-fit">
-              <Phone size={14} /> Kontribusi Omset Telemarketing: {formatRupiah(teleContribution)}
+              <Phone size={14} />
+              Kontribusi Omset Telemarketing: {formatRupiah(teleContribution)}
+              {dsrTotal > 0 && (
+                <span className="text-brand-500 dark:text-brand-300 font-bold">
+                  ({((teleContribution / dsrTotal) * 100).toFixed(1)}% dari omset {selectedDSR ?? '-'})
+                </span>
+              )}
             </div>
 
             <div className="overflow-x-auto">
