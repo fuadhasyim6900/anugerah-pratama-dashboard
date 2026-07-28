@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.9",
     "@vercel/analytics": "^1.5.0",
     "clsx": "^2.1.1",
     "html2canvas": "^1.4.1",

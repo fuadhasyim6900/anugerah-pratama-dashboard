@@ -1,86 +1,88 @@
-import * as XLSX from 'xlsx';
+import { supabase } from './supabaseClient';
 import type { SalesRow, TargetRow } from './types';
 import { normalizeBulanToMonthNum } from './types';
 
-// The two source files live in /public/data. To publish new data, just replace
-// these two files (keeping the exact same file names) in the GitHub repo and
-// push — Vercel will redeploy automatically and the dashboard will pick up the
-// new numbers on next load. No code changes required.
-const OMSET_URL = '/data/DATA.xlsx';
-const TARGET_URL = '/data/DATA_TARGET_FUAD.xlsx';
+const PAGE_SIZE = 1000;
 
-function toNumber(v: unknown): number {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string') {
-    const cleaned = v.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(cleaned);
-    return isNaN(n) ? 0 : n;
+async function fetchAllRows<T>(table: string, columns: string): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+
+  for (;;) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase.from(table).select(columns).range(from, to);
+
+    if (error) throw new Error(`Gagal memuat data dari tabel "${table}": ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    rows.push(...(data as unknown as T[]));
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
-  return 0;
+
+  return rows;
 }
 
-async function fetchWorkbook(url: string): Promise<XLSX.WorkBook> {
-  const res = await fetch(`${url}?v=${Date.now()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Gagal memuat data: ${url} (${res.status})`);
-  const buf = await res.arrayBuffer();
-  return XLSX.read(buf, { type: 'array', cellDates: true });
+interface SalesDbRow {
+  nominal: number;
+  supp: string;
+  depo: string;
+  bulan: string;
+  tahun: number;
+  kd_grup: string;
+  sales: string;
+  kota: string;
+  tele: string;
 }
 
-// Some exported spreadsheets keep the literal quote characters and stray
-// whitespace from a CSV export in the header cells (e.g. `" DEPO "` instead of
-// `DEPO`). This normalizes every row's keys so field lookups are resilient to
-// that, whatever the exact header formatting turns out to be.
-function normalizeKey(k: string): string {
-  return k.replace(/^["'\s]+|["'\s]+$/g, '').trim().toUpperCase();
-}
-
-function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) {
-    out[normalizeKey(k)] = v;
-  }
-  return out;
+interface TargetDbRow {
+  nama_salesman: string;
+  depo: string;
+  supplier: string;
+  tahun: number;
+  monthly: number[];
 }
 
 export async function loadSalesData(): Promise<SalesRow[]> {
-  const wb = await fetchWorkbook(OMSET_URL);
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const rows = await fetchAllRows<SalesDbRow>(
+    'sales',
+    'nominal, supp, depo, bulan, tahun, kd_grup, sales, kota, tele'
+  );
 
-  return rawRows.map((raw): SalesRow => {
-    const r = normalizeRow(raw);
-    const bulanRaw = String(r['BULAN'] ?? '').trim();
-    const monthNum = normalizeBulanToMonthNum(bulanRaw);
-    const teleRaw = String(r['TELE'] ?? '').trim();
-    return {
-      nominal: toNumber(r['NOMINAL']),
-      supp: String(r['SUPP'] ?? '').trim(),
-      depo: String(r['DEPO'] ?? '').trim().toUpperCase(),
-      bulan: bulanRaw,
-      monthNum,
-      tahun: r['TAHUN'] ? Number(r['TAHUN']) : 2026,
-      kdGrup: String(r['KD GRUP'] ?? '').trim(),
-      sales: String(r['SALES'] ?? '').trim(),
-      kota: String(r['KOTA'] ?? '').trim().toUpperCase(),
-      tele: teleRaw,
-    };
-  }).filter((r) => r.depo && r.sales);
+  return rows
+    .map((r): SalesRow => {
+      const bulanRaw = String(r.bulan ?? '').trim();
+      return {
+        nominal: Number(r.nominal) || 0,
+        supp: String(r.supp ?? '').trim(),
+        depo: String(r.depo ?? '').trim().toUpperCase(),
+        bulan: bulanRaw,
+        monthNum: normalizeBulanToMonthNum(bulanRaw),
+        tahun: r.tahun ?? 2026,
+        kdGrup: String(r.kd_grup ?? '').trim(),
+        sales: String(r.sales ?? '').trim(),
+        kota: String(r.kota ?? '').trim().toUpperCase(),
+        tele: String(r.tele ?? '').trim(),
+      };
+    })
+    .filter((r) => r.depo && r.sales);
 }
 
 export async function loadTargetData(): Promise<TargetRow[]> {
-  const wb = await fetchWorkbook(TARGET_URL);
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
-  const monthCols = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const rows = await fetchAllRows<TargetDbRow>(
+    'targets',
+    'nama_salesman, depo, supplier, tahun, monthly'
+  );
 
-  return rawRows.map((raw): TargetRow => {
-    const r = normalizeRow(raw);
-    return {
-      namaSalesman: String(r['NAMA SALESMAN'] ?? '').trim(),
-      depo: String(r['DEPO'] ?? '').trim().toUpperCase(),
-      supplier: String(r['SUPPLIER'] ?? '').trim().toUpperCase(),
-      tahun: r['TAHUN'] ? Number(r['TAHUN']) : new Date().getFullYear(),
-      monthly: monthCols.map((c) => toNumber(r[c])),
-    };
-  }).filter((r) => r.namaSalesman);
+  return rows
+    .map((r): TargetRow => ({
+      namaSalesman: String(r.nama_salesman ?? '').trim(),
+      depo: String(r.depo ?? '').trim().toUpperCase(),
+      supplier: String(r.supplier ?? '').trim().toUpperCase(),
+      tahun: r.tahun ?? new Date().getFullYear(),
+      monthly: Array.isArray(r.monthly) && r.monthly.length === 12
+        ? r.monthly.map((v) => Number(v) || 0)
+        : new Array(12).fill(0),
+    }))
+    .filter((r) => r.namaSalesman);
 }
