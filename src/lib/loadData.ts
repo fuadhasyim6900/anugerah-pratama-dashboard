@@ -2,25 +2,46 @@ import { supabase } from './supabaseClient';
 import type { SalesRow, TargetRow } from './types';
 import { normalizeBulanToMonthNum } from './types';
 
-const PAGE_SIZE = 1000;
+// Data sekarang disimpan di Supabase (tabel `sales` dan `targets`), bukan lagi
+// di file Excel dalam repo. Untuk update data harian, edit langsung lewat
+// Supabase Table Editor / SQL Editor, atau lewat script import terpisah —
+// TIDAK perlu commit/push/redeploy lagi.
 
-async function fetchAllRows<T>(table: string, columns: string): Promise<T[]> {
-  const rows: T[] = [];
-  let from = 0;
+const PAGE_SIZE = 1000; // batas default PostgREST per request (naikkan lewat
+// Supabase Dashboard -> Settings -> API -> "Max Rows" kalau ingin lebih besar)
 
-  for (;;) {
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await supabase.from(table).select(columns).range(from, to);
+// Sebelumnya versi ini mengambil data per halaman SECARA BERURUTAN (satu
+// request nunggu selesai baru request berikutnya jalan) — untuk tabel besar
+// seperti `sales` (~260rb baris = ~261 request) ini bikin loading awal lama.
+// Sekarang: hitung dulu total baris, lalu ambil SEMUA halaman SECARA
+// PARALEL sekaligus, jauh lebih cepat.
+async function fetchAllRows<T>(
+  table: string,
+  columns: string
+): Promise<T[]> {
+  // 1. Hitung total baris dulu (request ringan, tidak ambil data)
+  const { count, error: countError } = await supabase
+    .from(table)
+    .select('*', { count: 'exact', head: true });
 
-    if (error) throw new Error(`Gagal memuat data dari tabel "${table}": ${error.message}`);
-    if (!data || data.length === 0) break;
+  if (countError) throw new Error(`Gagal menghitung jumlah baris "${table}": ${countError.message}`);
+  const total = count ?? 0;
+  if (total === 0) return [];
 
-    rows.push(...(data as unknown as T[]));
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
+  // 2. Susun semua request halaman, lalu jalankan bersamaan lewat Promise.all
+  const pageStarts: number[] = [];
+  for (let from = 0; from < total; from += PAGE_SIZE) pageStarts.push(from);
 
-  return rows;
+  const pages = await Promise.all(
+    pageStarts.map(async (from) => {
+      const to = from + PAGE_SIZE - 1;
+      const { data, error } = await supabase.from(table).select(columns).range(from, to);
+      if (error) throw new Error(`Gagal memuat data dari tabel "${table}": ${error.message}`);
+      return (data ?? []) as unknown as T[];
+    })
+  );
+
+  return pages.flat();
 }
 
 interface SalesDbRow {
