@@ -11,6 +11,7 @@ import {
   supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
   targetVsOmsetBySupplier, targetForDSR, sumTarget, DEPO_LIST_EXCLUDING_ADMIN,
+  dsrRankingBySupplier,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
@@ -213,9 +214,32 @@ export default function KinerjaDSR() {
     [sales, targets, filters.depo, filters.bulan, filters.tahun, targetDSRFilter, targetSuppFilter]
   );
 
+  // --- Tabel Ranking DSR per Supplier -----------------------------------
+  // Bulan & Tahun are bound directly to the main sidebar filter store (like
+  // AO Persupplier on the Executive Dashboard), so changing them here also
+  // updates the sidebar. Supplier is a local filter scoped to this table
+  // only, e.g. picking "DAMDEX" ranks every DSR by their DAMDEX omset,
+  // highest to lowest.
+  const suppOptionsForDsrRanking = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.supp).filter(Boolean))).sort(),
+    [filtered]
+  );
+  const [dsrRankingSuppFilter, setDsrRankingSuppFilter] = useState<string[]>([]);
+  useEffect(() => {
+    setDsrRankingSuppFilter((prev) => prev.filter((s) => suppOptionsForDsrRanking.includes(s)));
+  }, [suppOptionsForDsrRanking]);
+
+  const dsrRankingBySupplierRows = useMemo(() => {
+    const rows = dsrRankingSuppFilter.length
+      ? filtered.filter((r) => dsrRankingSuppFilter.includes(r.supp))
+      : filtered;
+    return dsrRankingBySupplier(rows);
+  }, [filtered, dsrRankingSuppFilter]);
+
   const rankingChartRef = useRef<HTMLDivElement>(null);
   const aoChartRef = useRef<HTMLDivElement>(null);
   const supplierBreakdownRef = useRef<HTMLDivElement>(null);
+  const dsrBySupplierRef = useRef<HTMLDivElement>(null);
   const dsrComparisonRef = useRef<HTMLDivElement>(null);
   const targetVsOmsetRef = useRef<HTMLDivElement>(null);
 
@@ -409,6 +433,90 @@ export default function KinerjaDSR() {
               </table>
             </div>
           </div>
+        </div>
+
+        <div className="card p-5" ref={dsrBySupplierRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">Ranking DSR per Supplier</h3>
+              <p className="text-xs text-ink-400">
+                Peringkat DSR berdasarkan omset untuk supplier terpilih, dari tertinggi ke terendah{dsrRankingSuppFilter.length ? ` · ${dsrRankingSuppFilter.join(', ')}` : ''} · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Depo"
+                  options={depoOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.depo}
+                  onChange={filters.setDepo}
+                  allLabel="Semua Depo"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={suppOptionsForDsrRanking.map((s) => ({ value: s, label: s }))}
+                  selected={dsrRankingSuppFilter}
+                  onChange={setDsrRankingSuppFilter}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-32">
+                <MultiSelect
+                  label="Tahun"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
+              <ExportMenu targetRef={dsrBySupplierRef} filename="ranking-dsr-per-supplier" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">DSR</th>
+                  <th className="py-2 pr-3 text-right">Omset</th>
+                  <th className="py-2 pr-3 text-right">Jumlah AO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dsrRankingBySupplierRows.rows.map((r) => (
+                  <tr key={r.dsr} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{r.dsr}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
+                  </tr>
+                ))}
+                {dsrRankingBySupplierRows.rows.length === 0 && (
+                  <tr><td colSpan={3} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {dsrRankingBySupplierRows.rows.length > 0 && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(dsrRankingBySupplierRows.grandTotal.omset)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(dsrRankingBySupplierRows.grandTotal.ao)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-ink-400 mt-3">
+            Pilih satu atau beberapa Supplier (mis. DAMDEX) untuk melihat DSR mana yang omsetnya paling tinggi untuk supplier tersebut. Jumlah AO dihitung per kombinasi DSR &amp; KD Grup dalam cakupan filter di atas.
+          </p>
         </div>
 
         <div className="card p-5" ref={dsrComparisonRef}>

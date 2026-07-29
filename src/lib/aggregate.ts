@@ -209,6 +209,37 @@ export function aoPerSupplier(rows: SalesRow[]): { rows: SupplierAORow[]; grandT
   };
 }
 
+export interface DsrBySupplierRow {
+  dsr: string;
+  omset: number;
+  ao: number;
+}
+
+// Ranks DSR by omset (highest to lowest) for whatever rows are passed in —
+// typically already narrowed down to a specific supplier (e.g. DAMDEX) plus
+// the Bulan/Tahun scope, so the caller can answer "who are the top DSR
+// selling this supplier's products". AO is a distinct count of KD GRUP
+// within each DSR's rows (in this filtered scope).
+export function dsrRankingBySupplier(rows: SalesRow[]): { rows: DsrBySupplierRow[]; grandTotal: DsrBySupplierRow } {
+  const map = new Map<string, { omset: number; ao: Set<string> }>();
+  for (const r of rows) {
+    if (!r.sales || r.sales === 'ADMIN') continue;
+    if (!map.has(r.sales)) map.set(r.sales, { omset: 0, ao: new Set() });
+    const entry = map.get(r.sales)!;
+    entry.omset += r.nominal;
+    entry.ao.add(r.kdGrup);
+  }
+  const rowsOut = Array.from(map.entries())
+    .map(([dsr, v]) => ({ dsr, omset: v.omset, ao: v.ao.size }))
+    .sort((a, b) => b.omset - a.omset);
+  const grandOmset = rowsOut.reduce((a, r) => a + r.omset, 0);
+  const grandAO = rowsOut.reduce((a, r) => a + r.ao, 0);
+  return {
+    rows: rowsOut,
+    grandTotal: { dsr: 'Grand Total', omset: grandOmset, ao: grandAO },
+  };
+}
+
 // Sum target nominal for one specific DSR (matched by TargetRow.namaSalesman),
 // across all suppliers, restricted to the given depo/bulan/tahun scope. Used
 // to show "Target" alongside a DSR's actual omset in their breakdown card.
