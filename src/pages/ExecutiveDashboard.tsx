@@ -209,6 +209,81 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
+        <div className="card p-5" ref={aoSupplierRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">AO Persupplier</h3>
+              <p className="text-xs text-ink-400">
+                Jumlah Active Outlet (AO) &amp; omset per supplier{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={supplierOptions.map((s) => ({ value: s, label: s }))}
+                  selected={supplierFilter}
+                  onChange={setSupplierFilter}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-32">
+                <MultiSelect
+                  label="Tahun"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
+              <ExportMenu targetRef={aoSupplierRef} filename="ao-persupplier" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Supplier</th>
+                  <th className="py-2 pr-3 text-right">Omset</th>
+                  <th className="py-2 pr-3 text-right">Jumlah AO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aoSupplierTable.rows.map((r) => (
+                  <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
+                  </tr>
+                ))}
+                {aoSupplierTable.rows.length === 0 && (
+                  <tr><td colSpan={3} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {aoSupplierTable.rows.length > 0 && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(aoSupplierTable.grandTotal.omset)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(aoSupplierTable.grandTotal.ao)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-ink-400 mt-3">
+            AO dihitung per kombinasi Supplier &amp; KD Grup (satu pelanggan bisa terhitung AO di lebih dari satu supplier).
+          </p>
+        </div>
+
         <div className="card p-5" ref={perbandinganBulananRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
             <div>
@@ -298,81 +373,6 @@ export default function ExecutiveDashboard() {
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="card p-5" ref={aoSupplierRef}>
-          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-            <div>
-              <h3 className="font-bold text-sm">AO Persupplier</h3>
-              <p className="text-xs text-ink-400">
-                Jumlah Active Outlet (AO) &amp; omset per supplier{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
-              <div className="w-full sm:w-48">
-                <MultiSelect
-                  label="Supplier"
-                  options={supplierOptions.map((s) => ({ value: s, label: s }))}
-                  selected={supplierFilter}
-                  onChange={setSupplierFilter}
-                  allLabel="Semua Supplier"
-                />
-              </div>
-              <div className="w-full sm:w-44">
-                <MultiSelect
-                  label="Bulan"
-                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-                  selected={filters.bulan.map(String)}
-                  onChange={(v) => filters.setBulan(v.map(Number))}
-                  allLabel="Semua Bulan (YTD)"
-                />
-              </div>
-              <div className="w-full sm:w-32">
-                <MultiSelect
-                  label="Tahun"
-                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
-                  selected={filters.tahun.map(String)}
-                  onChange={(v) => filters.setTahun(v.map(Number))}
-                  allLabel="Semua Tahun"
-                />
-              </div>
-              <ExportMenu targetRef={aoSupplierRef} filename="ao-persupplier" />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
-                  <th className="py-2 pr-3">Supplier</th>
-                  <th className="py-2 pr-3 text-right">Omset</th>
-                  <th className="py-2 pr-3 text-right">Jumlah AO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {aoSupplierTable.rows.map((r) => (
-                  <tr key={r.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
-                    <td className="py-2 pr-3 font-semibold">{r.supplier}</td>
-                    <td className="py-2 pr-3 text-right">{formatRupiah(r.omset)}</td>
-                    <td className="py-2 pr-3 text-right">{formatNumber(r.ao)}</td>
-                  </tr>
-                ))}
-                {aoSupplierTable.rows.length === 0 && (
-                  <tr><td colSpan={3} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
-                )}
-                {aoSupplierTable.rows.length > 0 && (
-                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
-                    <td className="py-2.5 pr-3">Grand Total</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(aoSupplierTable.grandTotal.omset)}</td>
-                    <td className="py-2.5 pr-3 text-right">{formatNumber(aoSupplierTable.grandTotal.ao)}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[11px] text-ink-400 mt-3">
-            AO dihitung per kombinasi Supplier &amp; KD Grup (satu pelanggan bisa terhitung AO di lebih dari satu supplier).
-          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
