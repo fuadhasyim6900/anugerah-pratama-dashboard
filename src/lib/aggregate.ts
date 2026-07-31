@@ -133,11 +133,11 @@ export function safeAverage(total: number, count: number): number {
 }
 
 export function distinctDSR(rows: SalesRow[]): string[] {
-  return Array.from(new Set(rows.map((r) => r.sales).filter((s) => s && s !== 'ADMIN'))).sort();
+  return Array.from(new Set(rows.map((r) => r.sales).filter((s) => s))).sort();
 }
 
 export function salesByDSR(rows: SalesRow[]): { dsr: string; nominal: number }[] {
-  return groupSumBy(rows.filter((r) => r.sales && r.sales !== 'ADMIN'), 'sales')
+  return groupSumBy(rows.filter((r) => r.sales), 'sales')
     .map((g) => ({ dsr: g.label, nominal: g.value }));
 }
 
@@ -223,7 +223,7 @@ export interface DsrBySupplierRow {
 export function dsrRankingBySupplier(rows: SalesRow[]): { rows: DsrBySupplierRow[]; grandTotal: DsrBySupplierRow } {
   const map = new Map<string, { omset: number; ao: Set<string> }>();
   for (const r of rows) {
-    if (!r.sales || r.sales === 'ADMIN') continue;
+    if (!r.sales) continue;
     if (!map.has(r.sales)) map.set(r.sales, { omset: 0, ao: new Set() });
     const entry = map.get(r.sales)!;
     entry.omset += r.nominal;
