@@ -80,3 +80,4 @@ Menggunakan **Plus Jakarta Sans** (sama seperti referensi), dimuat lewat Google 
 
 - **Ekspor Halaman Aktif** — merender halaman yang sedang dibuka menjadi PDF (via `html2canvas` + `jsPDF`) lalu otomatis mengunduhnya. File PDF yang terunduh bisa langsung dicetak dari PDF viewer manapun.
 - **Ekspor Laporan Lengkap** — otomatis berpindah ke keempat halaman satu per satu, menangkap tiap halaman, lalu menggabungkannya menjadi satu file PDF multi-halaman.
+
