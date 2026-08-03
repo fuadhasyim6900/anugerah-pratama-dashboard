@@ -31,6 +31,26 @@ public/data/DATA_TARGET_FUAD.xlsx   → target bulanan per salesman/supplier
 
 > Catatan: kolom `TAHUN` pada file omset saat ini belum ada (data yang diupload baru berisi 2026). Begitu Anda menambahkan kolom `TAHUN` beserta data 2025, filter Tahun dan perbandingan YoY di halaman Proyeksi S2 akan otomatis terisi tanpa perlu ubah kode apa pun — kalau kolom `TAHUN` kosong, baris otomatis dianggap tahun 2026.
 
+## Menampilkan waktu terakhir update data
+
+Dashboard menampilkan **"Data terakhir diupdate: ..."** di kanan atas — ini adalah waktu Anda terakhir menjalankan `node scripts/sync-data.mjs` (bukan waktu browser memuat halaman, yang ditampilkan terpisah sebagai "Dimuat di browser").
+
+Sekali saja, buat tabel kecil ini di Supabase (**SQL Editor** → jalankan query berikut):
+
+```sql
+create table if not exists data_meta (
+  id int primary key,
+  synced_at timestamptz not null default now()
+);
+
+alter table data_meta enable row level security;
+
+create policy "Allow public read" on data_meta
+  for select using (true);
+```
+
+Setelah itu, setiap kali Anda menjalankan `node scripts/sync-data.mjs`, waktu sync otomatis tercatat ke tabel ini dan langsung muncul di dashboard setelah Anda klik **Refresh**. Tidak perlu setup tambahan apa pun — kalau tabel ini belum dibuat, dashboard tetap jalan normal, hanya saja baris "Data terakhir diupdate" belum muncul.
+
 ## Menjalankan secara lokal
 
 ```bash

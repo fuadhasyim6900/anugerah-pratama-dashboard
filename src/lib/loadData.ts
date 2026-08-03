@@ -89,6 +89,21 @@ export async function loadSalesData(): Promise<SalesRow[]> {
     .filter((r) => r.depo && r.sales);
 }
 
+// Waktu terakhir data di-sync ke Supabase (diisi oleh scripts/sync-data.mjs
+// setiap kali Anda menjalankan sinkronisasi Excel -> database). Ini BEDA
+// dengan waktu browser memuat data (yang berubah setiap refresh halaman) —
+// ini adalah waktu Anda benar-benar meng-update datanya.
+export async function loadDataSyncedAt(): Promise<Date | null> {
+  const { data, error } = await supabase
+    .from('data_meta')
+    .select('synced_at')
+    .eq('id', 1)
+    .maybeSingle();
+
+  if (error || !data?.synced_at) return null;
+  return new Date(data.synced_at);
+}
+
 export async function loadTargetData(): Promise<TargetRow[]> {
   const rows = await fetchAllRows<TargetDbRow>(
     'targets',

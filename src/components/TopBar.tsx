@@ -7,7 +7,7 @@ import { exportActivePageToPdf, exportFullReportToPdf } from '../lib/exportPdf';
 
 export default function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
   const { dark, toggle } = useThemeStore();
-  const { reload, lastUpdated, loading } = useSalesData();
+  const { reload, lastUpdated, dataUpdatedAt, loading } = useSalesData();
   const { sidebarCollapsed, toggleSidebarCollapsed, setMobileNavOpen } = useUIStore();
   const [exporting, setExporting] = useState<'page' | 'full' | null>(null);
 
@@ -41,9 +41,14 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
         <div className="min-w-0">
           <h1 className="text-base sm:text-xl font-extrabold tracking-tight truncate">{title}</h1>
           {subtitle && <p className="text-xs text-ink-400 font-medium mt-0.5 truncate">{subtitle}</p>}
+          {dataUpdatedAt && (
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+              Data terakhir diupdate: {dataUpdatedAt.toLocaleString('id-ID')}
+            </p>
+          )}
           {lastUpdated && (
             <p className="text-[11px] text-ink-400 mt-0.5">
-              Data dimuat: {lastUpdated.toLocaleString('id-ID')}
+              Dimuat di browser: {lastUpdated.toLocaleString('id-ID')}
             </p>
           )}
         </div>

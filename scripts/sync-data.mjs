@@ -130,10 +130,19 @@ async function syncTargets() {
   await insertBatched('targets', rows);
 }
 
+async function updateSyncedAt() {
+  console.log('Mencatat waktu update data...');
+  const { error } = await supabase
+    .from('data_meta')
+    .upsert({ id: 1, synced_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) throw new Error(`Gagal mencatat waktu update di "data_meta": ${error.message}`);
+}
+
 async function main() {
   console.log('=== Sinkronisasi data Excel -> Supabase ===\n');
   await syncSales();
   await syncTargets();
+  await updateSyncedAt();
   console.log('\nSelesai! Buka dashboard Anda dan refresh untuk lihat data terbaru.');
 }
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { SalesRow, TargetRow } from '../lib/types';
-import { loadSalesData, loadTargetData } from '../lib/loadData';
+import { loadSalesData, loadTargetData, loadDataSyncedAt } from '../lib/loadData';
 
 interface DataContextValue {
   sales: SalesRow[];
@@ -9,6 +9,8 @@ interface DataContextValue {
   error: string | null;
   reload: () => void;
   lastUpdated: Date | null;
+  /** Waktu Anda terakhir menjalankan `node scripts/sync-data.mjs` (data benar-benar diupdate). */
+  dataUpdatedAt: Date | null;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -19,14 +21,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [dataUpdatedAt, setDataUpdatedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [s, t] = await Promise.all([loadSalesData(), loadTargetData()]);
+      const [s, t, syncedAt] = await Promise.all([loadSalesData(), loadTargetData(), loadDataSyncedAt()]);
       setSales(s);
       setTargets(t);
+      setDataUpdatedAt(syncedAt);
       setLastUpdated(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal memuat data');
@@ -38,7 +42,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <DataContext.Provider value={{ sales, targets, loading, error, reload: load, lastUpdated }}>
+    <DataContext.Provider value={{ sales, targets, loading, error, reload: load, lastUpdated, dataUpdatedAt }}>
       {children}
     </DataContext.Provider>
   );
