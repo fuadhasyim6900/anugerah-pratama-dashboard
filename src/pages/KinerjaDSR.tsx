@@ -3,13 +3,14 @@ import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
 import DsrRankingChart from '../components/charts/DsrRankingChart';
+import DualAxisComboChart from '../components/charts/DualAxisComboChart';
 import MultiSelect from '../components/MultiSelect';
 import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
   applyFilters, salesByDSR, avgMonthlyAOByDSR, telemarketingContribution,
-  supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
+  supplierBreakdownForDSR, formatRupiah, formatNumber, formatCompactRupiah, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
   targetVsOmsetBySupplier, targetForDSR, sumTarget, DEPO_LIST_EXCLUDING_ADMIN,
   dsrRankingBySupplier, maxOf,
@@ -282,7 +283,7 @@ export default function KinerjaDSR() {
           />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="card p-5" ref={rankingChartRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Peringkat Penjualan DSR</h3>
@@ -314,8 +315,9 @@ export default function KinerjaDSR() {
             <BarChartCard
               data={avgAO.map((r) => ({ dsr: r.dsr, AO: r.avgAo }))}
               xKey="dsr"
-              horizontal
-              height={Math.max(260, avgAO.length * 28)}
+              angledLabels
+              minWidth={Math.max(avgAO.length * 90, 480)}
+              height={340}
               valueFormatter={(v) => `${formatNumber(v)} outlet`}
               series={[{ key: 'AO', color: '#b91c1c', name: aoSeriesName }]}
             />
@@ -588,7 +590,27 @@ export default function KinerjaDSR() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <p className="text-xs text-ink-400 mb-2">
+            Penjualan (bar, sumbu kiri) &amp; AO (garis, sumbu kanan) per bulan — Pertumbuhan Sales (%) &amp; Pertumbuhan AO (%) tidak ditampilkan di grafik ini, lihat kolomnya di tabel di bawah.
+          </p>
+          <DualAxisComboChart
+            data={dsrSalesComparison.rows}
+            xKey="bulan"
+            bars={[
+              { key: 'salesA', color: '#d9d9de', name: `Penjualan ${cmpTahunALabel}` },
+              { key: 'salesB', color: '#b91c1c', name: `Penjualan ${cmpTahunBLabel}` },
+            ]}
+            lines={[
+              { key: 'aoA', color: '#2563eb', name: `AO ${cmpTahunALabel}`, dashed: true },
+              { key: 'aoB', color: '#059669', name: `AO ${cmpTahunBLabel}` },
+            ]}
+            leftFormatter={(v) => formatCompactRupiah(v)}
+            leftTooltipFormatter={(v) => formatRupiah(v)}
+            rightFormatter={(v) => formatNumber(v)}
+            rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
+          />
+
+          <div className="overflow-x-auto mt-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">

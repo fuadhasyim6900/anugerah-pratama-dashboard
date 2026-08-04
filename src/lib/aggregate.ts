@@ -84,10 +84,24 @@ export function distinctCount(rows: SalesRow[], key: keyof SalesRow): number {
 // actual data so target and realisasi always cover the same period. Targets
 // are year-specific (each row belongs to a single TAHUN), so a tahun filter is
 // applied the same way depo is.
-export function sumTarget(targets: TargetRow[], depo: string[], monthNums: number[], tahun: number[] = []): number {
+export function sumTarget(
+  targets: TargetRow[],
+  depo: string[],
+  monthNums: number[],
+  tahun: number[] = [],
+  dsr: string[] = [],
+  supp: string[] = []
+): number {
   const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
+  const dsrSet = new Set(dsr.map((d) => d.trim().toUpperCase()));
+  const suppSet = new Set(supp.map((s) => s.trim().toUpperCase()));
   return targets
-    .filter((t) => (depo.length === 0 || depo.includes(t.depo)) && (tahun.length === 0 || tahun.includes(t.tahun)))
+    .filter((t) =>
+      (depo.length === 0 || depo.includes(t.depo))
+      && (tahun.length === 0 || tahun.includes(t.tahun))
+      && (dsrSet.size === 0 || dsrSet.has(t.namaSalesman.trim().toUpperCase()))
+      && (suppSet.size === 0 || suppSet.has(t.supplier.trim().toUpperCase()))
+    )
     .reduce((acc, t) => acc + idxs.reduce((s, mi) => s + (t.monthly[mi] || 0), 0), 0);
 }
 

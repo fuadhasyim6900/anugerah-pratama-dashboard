@@ -24,8 +24,8 @@ export default function ExecutiveDashboard() {
   const totalOmset = useMemo(() => sumNominal(filtered), [filtered]);
   const monthsPresent = useMemo(() => distinctMonthsPresent(filtered), [filtered]);
   const totalTarget = useMemo(
-    () => sumTarget(targets, filters.depo, monthsPresent, filters.tahun),
-    [targets, filters.depo, monthsPresent, filters.tahun]
+    () => sumTarget(targets, filters.depo, monthsPresent, filters.tahun, filters.dsr, filters.supp),
+    [targets, filters.depo, monthsPresent, filters.tahun, filters.dsr, filters.supp]
   );
   const totalAO = useMemo(() => distinctCount(filtered, 'kdGrup'), [filtered]);
   const avgOmsetPerAO = useMemo(() => safeAverage(totalOmset, totalAO), [totalOmset, totalAO]);
@@ -50,7 +50,7 @@ export default function ExecutiveDashboard() {
     return MONTH_NAMES_ID.slice(0, 12).filter((m) => monthsAvailable.has(m)).map((bulanLbl) => {
       const monthNum = MONTH_NAMES_ID.indexOf(bulanLbl) + 1;
       const realisasi = monthlyActual.find((m) => m.bulan === bulanLbl)?.nominal || 0;
-      const target = sumTarget(targets, filters.depo, [monthNum], filters.tahun);
+      const target = sumTarget(targets, filters.depo, [monthNum], filters.tahun, filters.dsr, filters.supp);
       return { bulan: bulanLbl, Realisasi: realisasi, Target: target, Omset: realisasi };
     });
   }, [sales, targets, filters]);

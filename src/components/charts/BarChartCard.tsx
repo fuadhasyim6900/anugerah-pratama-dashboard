@@ -8,7 +8,7 @@ interface Series {
 }
 
 export default function BarChartCard({
-  data, xKey, series, height = 300, horizontal = false, valueFormatter,
+  data, xKey, series, height = 300, horizontal = false, valueFormatter, angledLabels = false, minWidth,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
@@ -16,15 +16,19 @@ export default function BarChartCard({
   height?: number;
   horizontal?: boolean;
   valueFormatter?: (v: number) => string;
+  /** Angle the category-axis tick labels (e.g. many DSR names) so they don't overlap. Only applies when horizontal=false. */
+  angledLabels?: boolean;
+  /** When set, wraps the chart in a horizontally-scrollable container at least this wide (px), so many categories stay readable instead of being squeezed. */
+  minWidth?: number;
 }) {
   // Tooltip always shows the full nominal; axis/bar labels use a compact
   // "688.9 Juta" / "1.2 M" form so long currency figures stay readable.
   const fmtFull = valueFormatter || ((v: number) => formatRupiah(v));
   const fmtLabel = valueFormatter || ((v: number) => formatCompactRupiah(v));
 
-  return (
+  const chart = (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 28, right: 36, left: 0, bottom: 8 }}>
+      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 28, right: 36, left: 0, bottom: angledLabels ? 56 : 8 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-ink-100 dark:stroke-ink-800" />
         {horizontal ? (
           <>
@@ -33,7 +37,11 @@ export default function BarChartCard({
           </>
         ) : (
           <>
-            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
+            <XAxis
+              dataKey={xKey}
+              tick={{ fontSize: 11 }}
+              {...(angledLabels ? { interval: 0, angle: -30, textAnchor: 'end', height: 60 } : {})}
+            />
             <YAxis tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} width={70} domain={[0, (max: number) => max * 1.12]} />
           </>
         )}
@@ -52,5 +60,13 @@ export default function BarChartCard({
         ))}
       </BarChart>
     </ResponsiveContainer>
+  );
+
+  if (!minWidth) return chart;
+
+  return (
+    <div className="w-full overflow-x-auto" data-export-scroll="true">
+      <div style={{ minWidth }}>{chart}</div>
+    </div>
   );
 }
