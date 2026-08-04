@@ -24,17 +24,17 @@ export default function BarChartCard({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 8, right: 36, left: 0, bottom: 8 }}>
+      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 28, right: 36, left: 0, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-ink-100 dark:stroke-ink-800" />
         {horizontal ? (
           <>
-            <XAxis type="number" tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} />
+            <XAxis type="number" tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} domain={[0, (max: number) => max * 1.12]} />
             <YAxis type="category" dataKey={xKey} width={110} tick={{ fontSize: 11 }} />
           </>
         ) : (
           <>
             <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} width={70} />
+            <YAxis tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} width={70} domain={[0, (max: number) => max * 1.12]} />
           </>
         )}
         <Tooltip formatter={(v) => fmtFull(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />

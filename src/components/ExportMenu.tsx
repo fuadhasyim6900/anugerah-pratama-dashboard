@@ -30,30 +30,72 @@ export default function ExportMenu({
     if (!node) return null;
     const { default: html2canvas } = await import('html2canvas');
     const isDark = document.documentElement.classList.contains('dark');
-    return html2canvas(node, {
-      backgroundColor: isDark ? '#0b0b0f' : '#ffffff',
-      scale: Math.min(2, window.devicePixelRatio || 1.5),
-      useCORS: true,
-      // Never include the "Unduh" button/dropdown itself in the exported
-      // image — it's UI chrome, not part of the chart/table content.
-      ignoreElements: (el) => el.hasAttribute('data-export-ignore'),
-      // html2canvas measures the custom webfont ("Plus Jakarta Sans")
-      // incorrectly, which clips text vertically inside fixed-height
-      // containers (e.g. the filter dropdown buttons). html2canvas builds
-      // an invisible off-screen copy of the page to capture from — this
-      // callback runs on that copy only, so it has no visible effect on the
-      // live page — so swap that copy to safe, already-loaded system fonts
-      // whose metrics it measures correctly, avoiding the clipping.
-      onclone: (clonedDoc) => {
-        const style = clonedDoc.createElement('style');
-        style.textContent = `
-          * {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-          }
-        `;
-        clonedDoc.head.appendChild(style);
-      },
-    });
+
+    // Some charts (e.g. "Peringkat Penjualan DSR" with many DSR selected)
+    // are wider than the card and scroll horizontally on screen — marked
+    // with data-export-scroll. html2canvas only captures what's currently
+    // visible inside a scrolled container, so exporting the live node would
+    // cut off everything past the visible slice. Work around it by
+    // rendering a temporary, full-width, off-screen clone (overflow made
+    // visible) and capturing that instead — the live page is untouched.
+    const scrollers = Array.from(
+      node.querySelectorAll<HTMLElement>('[data-export-scroll]')
+    );
+    const needsFullWidthClone = scrollers.some((el) => el.scrollWidth > el.clientWidth + 1);
+
+    let captureNode: HTMLElement = node;
+    let cleanup: (() => void) | null = null;
+
+    if (needsFullWidthClone) {
+      const clone = node.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll<HTMLElement>('[data-export-scroll]').forEach((el) => {
+        el.style.overflow = 'visible';
+        el.style.width = 'max-content';
+      });
+      clone.style.position = 'fixed';
+      clone.style.top = '0';
+      clone.style.left = '-99999px';
+      clone.style.width = 'max-content';
+      clone.style.maxWidth = 'none';
+      clone.style.margin = '0';
+      document.body.appendChild(clone);
+      captureNode = clone;
+      cleanup = () => {
+        if (clone.parentNode) clone.parentNode.removeChild(clone);
+      };
+    }
+
+    try {
+      return await html2canvas(captureNode, {
+        backgroundColor: isDark ? '#0b0b0f' : '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        // Never include the "Unduh" button/dropdown itself, nor any chart
+        // tooltip that happened to be open (hover state) when the export
+        // was triggered — neither is part of the chart/table content.
+        ignoreElements: (el) =>
+          el.hasAttribute('data-export-ignore') ||
+          el.classList.contains('recharts-tooltip-wrapper'),
+        // html2canvas measures the custom webfont ("Plus Jakarta Sans")
+        // incorrectly, which clips text vertically inside fixed-height
+        // containers (e.g. the filter dropdown buttons). html2canvas builds
+        // an invisible off-screen copy of the page to capture from — this
+        // callback runs on that copy only, so it has no visible effect on the
+        // live page — so swap that copy to safe, already-loaded system fonts
+        // whose metrics it measures correctly, avoiding the clipping.
+        onclone: (clonedDoc) => {
+          const style = clonedDoc.createElement('style');
+          style.textContent = `
+            * {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+            }
+          `;
+          clonedDoc.head.appendChild(style);
+        },
+      });
+    } finally {
+      cleanup?.();
+    }
   }
 
   // Close the dropdown and wait for React to re-render + the browser to

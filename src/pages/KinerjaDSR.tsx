@@ -294,7 +294,7 @@ export default function KinerjaDSR() {
                 Total: {formatRupiah(totalOmsetAll)}
               </p>
             </div>
-            <DsrRankingChart data={rankingWithTarget} height={Math.max(260, ranking.length * 30)} />
+            <DsrRankingChart data={rankingWithTarget} height={380} />
             <p className="text-[11px] text-ink-400 mt-2">
               Persentase pada bar Omset adalah pencapaian omset DSR terhadap target milik DSR itu sendiri (Omset ÷ Target DSR × 100%).
             </p>

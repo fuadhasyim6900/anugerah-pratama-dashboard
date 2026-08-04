@@ -28,7 +28,7 @@ export default function LineChartCard({
       <LineChart data={data} margin={{ top: 22, right: 20, left: 0, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-ink-100 dark:stroke-ink-800" />
         <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
-        <YAxis tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} width={70} />
+        <YAxis tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} width={70} domain={[0, (max: number) => max * 1.12]} />
         <Tooltip formatter={(v) => fmtFull(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
         {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
         {series.map((s) => (

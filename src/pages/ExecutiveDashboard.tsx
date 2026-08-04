@@ -180,7 +180,6 @@ export default function ExecutiveDashboard() {
             <BarChartCard
               data={omsetPerKota.map((k) => ({ label: k.label, Omset: k.value }))}
               xKey="label"
-              horizontal
               series={[{ key: 'Omset', color: '#ef4444', name: 'Omset' }]}
               height={320}
             />
@@ -221,7 +220,7 @@ export default function ExecutiveDashboard() {
               { key: 'Target', color: '#d9d9de', name: 'Target' },
               { key: 'Realisasi', color: '#b91c1c', name: 'Realisasi' },
             ]}
-            lines={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
+            lines={[{ key: 'Omset', color: '#2563eb', name: 'Omset' }]}
           />
         </div>
 
