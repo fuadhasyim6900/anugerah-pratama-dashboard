@@ -3,6 +3,8 @@ import { MONTH_NAMES_ID } from './types';
 
 export interface Filters {
   depo: string[];  // empty = semua depo
+  dsr?: string[];  // empty/undefined = semua Sales DSR
+  supp?: string[]; // empty/undefined = semua Supplier (SUPP)
   bulan: number[]; // empty = semua bulan (1-12 each)
   tahun: number[]; // empty = semua tahun
 }
@@ -12,10 +14,19 @@ export const DEPO_LIST_EXCLUDING_ADMIN = (rows: SalesRow[]): string[] => {
   return Array.from(set).sort();
 };
 
+// Distinct list of supplier codes (SUPP) present in the data, used to
+// populate the main "SUPP" sidebar filter.
+export const SUPP_LIST = (rows: SalesRow[]): string[] => {
+  const set = new Set(rows.map((r) => r.supp).filter(Boolean));
+  return Array.from(set).sort();
+};
+
 export function applyFilters(rows: SalesRow[], f: Filters): SalesRow[] {
   return rows.filter((r) => {
     if (f.tahun.length && !f.tahun.includes(r.tahun)) return false;
     if (f.depo.length && !f.depo.includes(r.depo)) return false;
+    if (f.dsr && f.dsr.length && !f.dsr.includes(r.sales)) return false;
+    if (f.supp && f.supp.length && !f.supp.includes(r.supp)) return false;
     if (f.bulan.length && !f.bulan.includes(r.monthNum)) return false;
     return true;
   });
@@ -44,9 +55,19 @@ export function tahunLabel(tahun: number[]): string {
 // projections comparing against year-1 / year-2) even though the year
 // filter itself now supports picking several years at once. Uses the most
 // recent selected year, or the most recent year in the data if none picked.
+// Aman untuk array berukuran berapapun. `Math.max(...arr)` bisa meledak
+// dengan "Maximum call stack size exceeded" kalau arr besar (ribuan+
+// elemen) karena spread mengubahnya jadi argumen fungsi satu-satu, dan
+// JS engine punya batas jumlah argumen. Dataset sales di app ini bisa
+// ~260rb baris, jadi semua pencarian max/min HARUS pakai reduce, bukan
+// spread ke Math.max/Math.min.
+export function maxOf(values: number[], fallback = 0): number {
+  return values.length ? values.reduce((a, b) => (b > a ? b : a)) : fallback;
+}
+
 export function primaryYear(tahun: number[], availableYears: number[]): number {
-  if (tahun.length) return Math.max(...tahun);
-  if (availableYears.length) return Math.max(...availableYears);
+  if (tahun.length) return maxOf(tahun);
+  if (availableYears.length) return maxOf(availableYears);
   return new Date().getFullYear();
 }
 
@@ -134,6 +155,25 @@ export function safeAverage(total: number, count: number): number {
 
 export function distinctDSR(rows: SalesRow[]): string[] {
   return Array.from(new Set(rows.map((r) => r.sales).filter((s) => s))).sort();
+}
+
+// Distinct DSR (sales) list scoped to the selected Depo/Tahun, and to the
+// selected Bulan if any — otherwise falls back to just the most recent
+// month present in that scope. This keeps the "Sales DSR" sidebar filter
+// from listing every DSR the company has ever had; e.g. Bulan = Agustus &
+// Depo = Jepara only shows DSR who were active in Jepara during Agustus.
+export function activeDsrList(rows: SalesRow[], depo: string[], bulan: number[], tahun: number[]): string[] {
+  let scoped = rows.filter((r) => depo.length === 0 || depo.includes(r.depo));
+  if (tahun.length) scoped = scoped.filter((r) => tahun.includes(r.tahun));
+  if (bulan.length) {
+    scoped = scoped.filter((r) => bulan.includes(r.monthNum));
+  } else if (scoped.length) {
+    const latestTahun = maxOf(scoped.map((r) => r.tahun));
+    const inLatestTahun = scoped.filter((r) => r.tahun === latestTahun);
+    const latestBulan = maxOf(inLatestTahun.map((r) => r.monthNum));
+    scoped = inLatestTahun.filter((r) => r.monthNum === latestBulan);
+  }
+  return distinctDSR(scoped);
 }
 
 export function salesByDSR(rows: SalesRow[]): { dsr: string; nominal: number }[] {

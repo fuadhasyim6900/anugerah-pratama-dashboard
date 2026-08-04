@@ -1,22 +1,36 @@
 import { NavLink } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useFilterStore } from '../store/filters';
 import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
-import { DEPO_LIST_EXCLUDING_ADMIN } from '../lib/aggregate';
+import { DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST, activeDsrList } from '../lib/aggregate';
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import { NAV_ITEMS } from '../lib/navItems';
 import MultiSelect from './MultiSelect';
 import clsx from 'clsx';
 import {
-  Building2, CalendarDays, CalendarRange, X,
+  Building2, UserRound, PackageSearch, CalendarDays, CalendarRange, X,
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { depo, bulan, tahun, setDepo, setBulan, setTahun } = useFilterStore();
+  const { depo, dsr, supp, bulan, tahun, setDepo, setDsr, setSupp, setBulan, setTahun } = useFilterStore();
   const { sales } = useSalesData();
   const depoList = DEPO_LIST_EXCLUDING_ADMIN(sales);
+  const dsrList = useMemo(
+    () => activeDsrList(sales, depo, bulan, tahun),
+    [sales, depo, bulan, tahun]
+  );
+  const suppList = SUPP_LIST(sales);
   const years = Array.from(new Set(sales.map((r) => r.tahun))).sort();
+
+  // Drop any selected DSR that's no longer active for the current Depo /
+  // Bulan (or latest-month fallback) / Tahun scope, so switching e.g. Depo
+  // doesn't silently keep filtering by a DSR that isn't in that depo.
+  useEffect(() => {
+    const stillValid = dsr.filter((d) => dsrList.includes(d));
+    if (stillValid.length !== dsr.length) setDsr(stillValid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dsrList]);
 
   // Default to the current running month & year the first time data loads
   // (e.g. Juli 2026), so the dashboard opens already filtered to "today".
@@ -108,6 +122,29 @@ export default function Sidebar() {
             selected={depo}
             onChange={setDepo}
             allLabel="Semua Depo"
+          />
+
+          <div>
+            <MultiSelect
+              label="Sales DSR"
+              icon={<UserRound size={13} />}
+              options={dsrList.map((d) => ({ value: d, label: d }))}
+              selected={dsr}
+              onChange={setDsr}
+              allLabel="Semua DSR"
+            />
+            <p className="text-[10px] text-ink-400 mt-1 leading-snug">
+              Hanya menampilkan DSR aktif di {bulan.length ? 'bulan yang dipilih' : 'bulan terbaru'}{depo.length ? ` · ${depo.length === 1 ? depo[0] : `${depo.length} Depo`}` : ''}
+            </p>
+          </div>
+
+          <MultiSelect
+            label="SUPP"
+            icon={<PackageSearch size={13} />}
+            options={suppList.map((s) => ({ value: s, label: s }))}
+            selected={supp}
+            onChange={setSupp}
+            allLabel="Semua Supplier"
           />
 
           <MultiSelect

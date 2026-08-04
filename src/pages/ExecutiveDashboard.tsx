@@ -3,7 +3,7 @@ import { Wallet, Target, Store, Gauge, Percent, Package } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
-import LineChartCard from '../components/charts/LineChartCard';
+import ComboChartCard from '../components/charts/ComboChartCard';
 import MultiSelect from '../components/MultiSelect';
 import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
@@ -40,11 +40,10 @@ export default function ExecutiveDashboard() {
     () => sumNominal(applyFilters(sales, { ...filters, depo: [] })),
     [sales, filters]
   );
-  // The monthly trend chart always shows every available month regardless of
-  // the Bulan filter, so ignore it here (but keep Depo/Tahun in effect).
-  const trend = useMemo(() => trendByMonth(applyFilters(sales, { ...filters, bulan: [] })), [sales, filters]);
-
-  // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is visible)
+  // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is
+  // visible). "Omset" mirrors "Realisasi" and is drawn as a line on top of the bars so the chart
+  // reads as a combo chart (bars for Target/Realisasi, line for the Omset trend), replacing the
+  // separate "Tren Omset Bulanan" line chart that used to sit next to it.
   const targetVsRealisasi = useMemo(() => {
     const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: [] }));
     const monthsAvailable = new Set(monthlyActual.map((m) => m.bulan));
@@ -52,7 +51,7 @@ export default function ExecutiveDashboard() {
       const monthNum = MONTH_NAMES_ID.indexOf(bulanLbl) + 1;
       const realisasi = monthlyActual.find((m) => m.bulan === bulanLbl)?.nominal || 0;
       const target = sumTarget(targets, filters.depo, [monthNum], filters.tahun);
-      return { bulan: bulanLbl, Realisasi: realisasi, Target: target };
+      return { bulan: bulanLbl, Realisasi: realisasi, Target: target, Omset: realisasi };
     });
   }, [sales, targets, filters]);
 
@@ -142,7 +141,6 @@ export default function ExecutiveDashboard() {
   }, [aoSupplierAll, supplierFilter]);
 
   const targetVsRealisasiRef = useRef<HTMLDivElement>(null);
-  const trenOmsetRef = useRef<HTMLDivElement>(null);
   const omsetPerKotaRef = useRef<HTMLDivElement>(null);
   const omsetPerDepoRef = useRef<HTMLDivElement>(null);
   const perbandinganBulananRef = useRef<HTMLDivElement>(null);
@@ -202,11 +200,29 @@ export default function ExecutiveDashboard() {
             <BarChartCard
               data={omsetPerDepo.map((k) => ({ label: k.label, Omset: k.value }))}
               xKey="label"
-              horizontal
               series={[{ key: 'Omset', color: '#b91c1c', name: 'Omset' }]}
               height={320}
             />
           </div>
+        </div>
+
+        <div className="card p-5" ref={targetVsRealisasiRef}>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h3 className="font-bold text-sm">Target vs Realisasi</h3>
+            <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
+          </div>
+          <p className="text-xs text-ink-400 mb-3">
+            Perbandingan target dan pencapaian omset per bulan, dengan garis tren Omset Bulanan
+          </p>
+          <ComboChartCard
+            data={targetVsRealisasi}
+            xKey="bulan"
+            bars={[
+              { key: 'Target', color: '#d9d9de', name: 'Target' },
+              { key: 'Realisasi', color: '#b91c1c', name: 'Realisasi' },
+            ]}
+            lines={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
+          />
         </div>
 
         <div className="card p-5" ref={aoSupplierRef}>
@@ -375,36 +391,6 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card p-5" ref={targetVsRealisasiRef}>
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <h3 className="font-bold text-sm">Target vs Realisasi</h3>
-              <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
-            </div>
-            <p className="text-xs text-ink-400 mb-3">Perbandingan target dan pencapaian omset per bulan</p>
-            <BarChartCard
-              data={targetVsRealisasi}
-              xKey="bulan"
-              series={[
-                { key: 'Target', color: '#d9d9de', name: 'Target' },
-                { key: 'Realisasi', color: '#dc2626', name: 'Realisasi' },
-              ]}
-            />
-          </div>
-
-          <div className="card p-5" ref={trenOmsetRef}>
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <h3 className="font-bold text-sm">Tren Omset Bulanan</h3>
-              <ExportMenu targetRef={trenOmsetRef} filename="tren-omset-bulanan" />
-            </div>
-            <p className="text-xs text-ink-400 mb-3">Pergerakan total penjualan sepanjang tahun {tahunLabel(filters.tahun)}</p>
-            <LineChartCard
-              data={trend.map((t) => ({ bulan: t.bulan, Omset: t.nominal }))}
-              xKey="bulan"
-              series={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
-            />
-          </div>
-        </div>
       </div>
     </div>
   );

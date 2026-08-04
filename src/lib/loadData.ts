@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase, supabaseConfigError } from './supabaseClient';
 import type { SalesRow, TargetRow } from './types';
 import { normalizeBulanToMonthNum } from './types';
 
@@ -19,6 +19,11 @@ async function fetchAllRows<T>(
   table: string,
   columns: string
 ): Promise<T[]> {
+  // Baru dicek di sini (bukan saat modul di-import) supaya kalau env belum
+  // diset, errornya tertangkap oleh try/catch di useSalesData.tsx dan
+  // ditampilkan lewat <ErrorState />, bukan bikin app gagal mount total.
+  if (supabaseConfigError) throw new Error(supabaseConfigError);
+
   // 1. Hitung total baris dulu (request ringan, tidak ambil data)
   const { count, error: countError } = await supabase
     .from(table)

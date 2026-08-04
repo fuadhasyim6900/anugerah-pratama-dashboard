@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
+import DsrRankingChart from '../components/charts/DsrRankingChart';
 import MultiSelect from '../components/MultiSelect';
 import ExportMenu from '../components/ExportMenu';
 import { useSalesData } from '../hooks/useSalesData';
@@ -11,7 +12,7 @@ import {
   supplierBreakdownForDSR, formatRupiah, formatNumber, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
   targetVsOmsetBySupplier, targetForDSR, sumTarget, DEPO_LIST_EXCLUDING_ADMIN,
-  dsrRankingBySupplier,
+  dsrRankingBySupplier, maxOf,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
@@ -25,6 +26,19 @@ export default function KinerjaDSR() {
   const ranking = useMemo(() => salesByDSR(filtered), [filtered]);
   const avgAO = useMemo(() => avgMonthlyAOByDSR(filtered), [filtered]);
   const totalOmsetAll = useMemo(() => sumNominal(filtered), [filtered]);
+
+  // Ranking chart data: each DSR's Omset alongside their own Target (from
+  // DATA_TARGET_FUAD, matched by DSR name), plus the achievement percentage
+  // of that DSR's own omset against their own target — e.g. Sobir's target
+  // for July is 300jt and he sold 150jt, so pct = 50%.
+  const rankingWithTarget = useMemo(
+    () => ranking.map((r) => {
+      const target = targetForDSR(targets, { dsr: r.dsr, depo: filters.depo, bulan: filters.bulan, tahun: filters.tahun });
+      const pct = target ? (r.nominal / target) * 100 : null;
+      return { dsr: r.dsr, Omset: r.nominal, Target: target, pct };
+    }),
+    [ranking, targets, filters.depo, filters.bulan, filters.tahun]
+  );
 
   // Total target across all DSR/supplier combined, within the current
   // Depo/Bulan/Tahun scope — used for the "Target Omset DSR" &
@@ -86,7 +100,7 @@ export default function KinerjaDSR() {
 
   const isAllMonths = filters.bulan.length === 0;
   const periodLabel = isAllMonths
-    ? `Januari - ${MONTH_NAMES_ID[Math.max(...filtered.map((r) => r.monthNum), 1) - 1] || 'Des'} ${tahunLabel(filters.tahun)}`
+    ? `Januari - ${MONTH_NAMES_ID[maxOf(filtered.map((r) => r.monthNum), 1) - 1] || 'Des'} ${tahunLabel(filters.tahun)}`
     : `${bulanLabel(filters.bulan)} ${tahunLabel(filters.tahun)}`;
 
   // "Rata-rata" only makes sense when the AO count is actually being averaged
@@ -275,18 +289,15 @@ export default function KinerjaDSR() {
               <ExportMenu targetRef={rankingChartRef} filename="peringkat-penjualan-dsr" />
             </div>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <p className="text-xs text-ink-400">Total Penjualan DSR Periode {periodLabel} (Aktual)</p>
+              <p className="text-xs text-ink-400">Total Penjualan DSR Periode {periodLabel} (Aktual vs Target)</p>
               <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
                 Total: {formatRupiah(totalOmsetAll)}
               </p>
             </div>
-            <BarChartCard
-              data={ranking.map((r) => ({ dsr: r.dsr, Omset: r.nominal }))}
-              xKey="dsr"
-              horizontal
-              height={Math.max(260, ranking.length * 28)}
-              series={[{ key: 'Omset', color: '#dc2626', name: 'Omset' }]}
-            />
+            <DsrRankingChart data={rankingWithTarget} height={Math.max(260, ranking.length * 30)} />
+            <p className="text-[11px] text-ink-400 mt-2">
+              Persentase pada bar Omset adalah pencapaian omset DSR terhadap target milik DSR itu sendiri (Omset ÷ Target DSR × 100%).
+            </p>
           </div>
 
           <div className="card p-5" ref={aoChartRef}>
