@@ -597,7 +597,7 @@ export default function KinerjaDSR() {
             data={dsrSalesComparison.rows}
             xKey="bulan"
             bars={[
-              { key: 'salesA', color: '#d9d9de', name: `Penjualan ${cmpTahunALabel}` },
+              { key: 'salesA', color: '#f59e0b', name: `Penjualan ${cmpTahunALabel}` },
               { key: 'salesB', color: '#b91c1c', name: `Penjualan ${cmpTahunBLabel}` },
             ]}
             lines={[
