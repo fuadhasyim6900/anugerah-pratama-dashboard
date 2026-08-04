@@ -204,6 +204,9 @@ export default function KinerjaDSR() {
 
   const cmpTahunALabel = cmpTahunA.length ? [...cmpTahunA].sort((a, b) => a - b).join('+') : '-';
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
+  // Shared with the DualAxisComboChart below, so the Penjualan/AO figures in
+  // the table are colored exactly like their matching bar/line in the chart.
+  const CMP_COLORS = { salesA: '#0284c7', salesB: '#047857', aoA: '#0891b2', aoB: '#65a30d' };
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
   // Own "Nama DSR" and "Supplier" filters (multi-select, default = semua).
@@ -597,12 +600,12 @@ export default function KinerjaDSR() {
             data={dsrSalesComparison.rows}
             xKey="bulan"
             bars={[
-              { key: 'salesA', color: '#f59e0b', name: `Penjualan ${cmpTahunALabel}` },
-              { key: 'salesB', color: '#b91c1c', name: `Penjualan ${cmpTahunBLabel}` },
+              { key: 'salesA', color: CMP_COLORS.salesA, name: `Penjualan ${cmpTahunALabel}` },
+              { key: 'salesB', color: CMP_COLORS.salesB, name: `Penjualan ${cmpTahunBLabel}` },
             ]}
             lines={[
-              { key: 'aoA', color: '#2563eb', name: `AO ${cmpTahunALabel}`, dashed: true },
-              { key: 'aoB', color: '#059669', name: `AO ${cmpTahunBLabel}` },
+              { key: 'aoA', color: CMP_COLORS.aoA, name: `AO ${cmpTahunALabel}`, dashed: true },
+              { key: 'aoB', color: CMP_COLORS.aoB, name: `AO ${cmpTahunBLabel}` },
             ]}
             leftFormatter={(v) => formatCompactRupiah(v)}
             leftTooltipFormatter={(v) => formatRupiah(v)}
@@ -627,13 +630,13 @@ export default function KinerjaDSR() {
                 {dsrSalesComparison.rows.map((m) => (
                   <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
                     <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
-                    <td className="py-2 pr-3 text-right">{m.inA ? formatRupiah(m.salesA) : '-'}</td>
-                    <td className="py-2 pr-3 text-right">{m.inB ? formatRupiah(m.salesB) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesA }}>{m.inA ? formatRupiah(m.salesA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesB }}>{m.inB ? formatRupiah(m.salesB) : '-'}</td>
                     <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
                     </td>
-                    <td className="py-2 pr-3 text-right">{m.inA ? formatNumber(m.aoA) : '-'}</td>
-                    <td className="py-2 pr-3 text-right">{m.inB ? formatNumber(m.aoB) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoA }}>{m.inA ? formatNumber(m.aoA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoB }}>{m.inB ? formatNumber(m.aoB) : '-'}</td>
                     <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
                     </td>
@@ -645,13 +648,13 @@ export default function KinerjaDSR() {
                 {dsrSalesComparison.grandTotal && dsrSalesComparison.rows.length > 0 && (
                   <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
                     <td className="py-2.5 pr-3">Grand Total</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
-                    <td className="py-2.5 pr-3 text-right">{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
                     <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {dsrSalesComparison.grandTotal.salesGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.salesGrowth.toFixed(1)}%`}
                     </td>
-                    <td className="py-2.5 pr-3 text-right">{formatNumber(dsrSalesComparison.grandTotal.aoA)}</td>
-                    <td className="py-2.5 pr-3 text-right">{formatNumber(dsrSalesComparison.grandTotal.aoB)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoA }}>{formatNumber(dsrSalesComparison.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoB }}>{formatNumber(dsrSalesComparison.grandTotal.aoB)}</td>
                     <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
                       {dsrSalesComparison.grandTotal.aoGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.aoGrowth.toFixed(1)}%`}
                     </td>
