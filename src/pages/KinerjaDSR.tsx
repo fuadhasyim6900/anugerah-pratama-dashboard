@@ -206,7 +206,7 @@ export default function KinerjaDSR() {
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
   // Shared with the DualAxisComboChart below, so the Penjualan/AO figures in
   // the table are colored exactly like their matching bar/line in the chart.
-  const CMP_COLORS = { salesA: '#0284c7', salesB: '#047857', aoA: '#0891b2', aoB: '#65a30d' };
+  const CMP_COLORS = { salesA: '#2563eb', salesB: '#eab308', aoA: '#0891b2', aoB: '#a16207' };
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
   // Own "Nama DSR" and "Supplier" filters (multi-select, default = semua).

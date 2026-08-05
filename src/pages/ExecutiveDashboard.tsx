@@ -33,6 +33,16 @@ export default function ExecutiveDashboard() {
 
   const omsetPerKota = useMemo(() => groupSumBy(filtered, 'kota').slice(0, 10), [filtered]);
   const omsetPerDepo = useMemo(() => groupSumBy(filtered, 'depo'), [filtered]);
+  // Target per depo, matched to each depo's own Omset bar above, so the
+  // "Omset per Depo" chart can show Target alongside Realisasi/Omset.
+  const omsetPerDepoWithTarget = useMemo(
+    () => omsetPerDepo.map((d) => ({
+      label: d.label,
+      Omset: d.value,
+      Target: sumTarget(targets, [d.label], monthsPresent, filters.tahun, filters.dsr, filters.supp),
+    })),
+    [omsetPerDepo, targets, monthsPresent, filters.tahun, filters.dsr, filters.supp]
+  );
   // Always the grand total across every depo for the selected Bulan/Tahun —
   // intentionally ignores the Depo filter itself, so picking e.g. "Jepara"
   // still shows the total for all depo, not just Jepara's own number.
@@ -42,8 +52,9 @@ export default function ExecutiveDashboard() {
   );
   // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is
   // visible). "Omset" mirrors "Realisasi" and is drawn as a line on top of the bars so the chart
-  // reads as a combo chart (bars for Target/Realisasi, line for the Omset trend), replacing the
-  // separate "Tren Omset Bulanan" line chart that used to sit next to it.
+  // reads as a combo chart (bars for Target/Realisasi, line for the Omset trend and a second line
+  // for the Target trend), replacing the separate "Tren Omset Bulanan" line chart that used to sit
+  // next to it.
   const targetVsRealisasi = useMemo(() => {
     const monthlyActual = trendByMonth(applyFilters(sales, { ...filters, bulan: [] }));
     const monthsAvailable = new Set(monthlyActual.map((m) => m.bulan));
@@ -170,7 +181,7 @@ export default function ExecutiveDashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="card p-5" ref={omsetPerKotaRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Omset per Kota</h3>
@@ -180,7 +191,7 @@ export default function ExecutiveDashboard() {
             <BarChartCard
               data={omsetPerKota.map((k) => ({ label: k.label, Omset: k.value }))}
               xKey="label"
-              series={[{ key: 'Omset', color: '#ef4444', name: 'Omset' }]}
+              series={[{ key: 'Omset', color: '#2563eb', name: 'Omset' }]}
               height={320}
             />
           </div>
@@ -191,15 +202,18 @@ export default function ExecutiveDashboard() {
               <ExportMenu targetRef={omsetPerDepoRef} filename="omset-per-depo" />
             </div>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <p className="text-xs text-ink-400">Distribusi penjualan di setiap depo</p>
+              <p className="text-xs text-ink-400">Distribusi penjualan di setiap depo, dengan Target masing-masing depo</p>
               <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
                 Total Semua Depo: {formatRupiah(omsetPerDepoTotal)}
               </p>
             </div>
             <BarChartCard
-              data={omsetPerDepo.map((k) => ({ label: k.label, Omset: k.value }))}
+              data={omsetPerDepoWithTarget}
               xKey="label"
-              series={[{ key: 'Omset', color: '#b91c1c', name: 'Omset' }]}
+              series={[
+                { key: 'Target', color: '#d9d9de', name: 'Target' },
+                { key: 'Omset', color: '#b91c1c', name: 'Omset' },
+              ]}
               height={320}
             />
           </div>
@@ -211,7 +225,7 @@ export default function ExecutiveDashboard() {
             <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
           </div>
           <p className="text-xs text-ink-400 mb-3">
-            Perbandingan target dan pencapaian omset per bulan, dengan garis tren Omset Bulanan
+            Perbandingan target dan pencapaian omset per bulan, dengan garis tren Target dan Omset Bulanan
           </p>
           <ComboChartCard
             data={targetVsRealisasi}
@@ -220,7 +234,10 @@ export default function ExecutiveDashboard() {
               { key: 'Target', color: '#d9d9de', name: 'Target' },
               { key: 'Realisasi', color: '#b91c1c', name: 'Realisasi' },
             ]}
-            lines={[{ key: 'Omset', color: '#2563eb', name: 'Omset' }]}
+            lines={[
+              { key: 'Target', color: '#16a34a', name: 'Target (Tren)', dashed: true },
+              { key: 'Omset', color: '#2563eb', name: 'Omset' },
+            ]}
           />
         </div>
 
