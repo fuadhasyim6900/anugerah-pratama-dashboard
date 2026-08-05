@@ -148,5 +148,9 @@ async function main() {
 
 main().catch((err) => {
   console.error('\nGAGAL:', err.message);
-  process.exit(1);
+  // Pakai exitCode (bukan process.exit paksa) supaya Node.js sempat menutup
+  // koneksi jaringan ke Supabase dengan bersih sebelum proses berakhir.
+  // process.exit() langsung di sini bisa memicu crash kosmetik di Windows
+  // ("Assertion failed ... UV_HANDLE_CLOSING") karena koneksi masih ditutup.
+  process.exitCode = 1;
 });

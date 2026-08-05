@@ -91,8 +91,8 @@ export default function ExecutiveDashboard() {
       salesA: number; salesB: number; salesGrowth: number | null;
       aoA: number; aoB: number; aoGrowth: number | null;
     } };
-    const rowsA = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [tahunA] });
-    const rowsB = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: [tahunB] });
+    const rowsA = applyFilters(sales, { depo: filters.depo, supp: filters.supp, bulan: [], tahun: [tahunA] });
+    const rowsB = applyFilters(sales, { depo: filters.depo, supp: filters.supp, bulan: [], tahun: [tahunB] });
     const rows = monthsToShow.map((monthNum) => {
       const label = MONTH_NAMES_ID[monthNum - 1];
       const aRows = rowsA.filter((r) => r.monthNum === monthNum);
@@ -130,7 +130,7 @@ export default function ExecutiveDashboard() {
         aoGrowth: pctChange(grandAoB, grandAoA),
       },
     };
-  }, [sales, filters.depo, monthsToShow, tahunA, tahunB]);
+  }, [sales, filters.depo, filters.supp, monthsToShow, tahunA, tahunB]);
 
   // --- Tabel AO Persupplier --------------------------------------------
   // Bulan & Tahun here are bound directly to the main sidebar filter store,
@@ -321,7 +321,7 @@ export default function ExecutiveDashboard() {
             <div>
               <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
               <p className="text-xs text-ink-400">
-                Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)}
+                Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)}{filters.supp.length ? ` · ${filters.supp.join(', ')}` : ''}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">

@@ -693,7 +693,7 @@ export default function KinerjaDSR() {
             </table>
           </div>
           <p className="text-[11px] text-ink-400 mt-3">
-            Pilih satu atau beberapa Supplier (mis. DAMDEX) untuk melihat DSR mana yang omsetnya paling tinggi untuk supplier tersebut. Jumlah AO dihitung per kombinasi DSR &amp; KD Grup dalam cakupan filter di atas.
+            Pilih satu atau beberapa Supplier (mis. DAMDEX) untuk melihat DSR mana yang omsetnya paling tinggi untuk supplier tersebut. Jumlah AO dihitung per kombinasi DSR &amp; KD Grup dalam cakupan filter di atas — satu outlet yang dilayani lebih dari satu DSR akan terhitung lebih dari sekali di Grand Total, sehingga bisa lebih besar dari "Total Active Outlet" di Executive Dashboard yang menghitung outlet unik sekali saja.
           </p>
         </div>
 
