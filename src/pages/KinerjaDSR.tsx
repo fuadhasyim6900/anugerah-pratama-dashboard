@@ -143,6 +143,16 @@ export default function KinerjaDSR() {
     setCompareDSR((prev) => prev.filter((d) => dsrOptionsForCompare.includes(d)));
   }, [dsrOptionsForCompare]);
 
+  // Supplier filter for this table, same pattern as the "Nama DSR" filter above.
+  const suppOptionsForCompare = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.supp).filter(Boolean))).sort(),
+    [filtered]
+  );
+  const [compareSupp, setCompareSupp] = useState<string[]>([]);
+  useEffect(() => {
+    setCompareSupp((prev) => prev.filter((s) => suppOptionsForCompare.includes(s)));
+  }, [suppOptionsForCompare]);
+
   // Independent month filters for each side of the comparison (Tahun A / Tahun
   // B), so e.g. "Jan-Jun Tahun A" can be compared against "Jan-Des Tahun B".
   // Empty selection = all 12 months for that side.
@@ -162,6 +172,10 @@ export default function KinerjaDSR() {
     if (compareDSR.length) {
       rowsA = rowsA.filter((r) => compareDSR.includes(r.sales));
       rowsB = rowsB.filter((r) => compareDSR.includes(r.sales));
+    }
+    if (compareSupp.length) {
+      rowsA = rowsA.filter((r) => compareSupp.includes(r.supp));
+      rowsB = rowsB.filter((r) => compareSupp.includes(r.supp));
     }
 
     const rows = cmpMonthsToShow.map((monthNum) => {
@@ -200,7 +214,7 @@ export default function KinerjaDSR() {
         aoGrowth: pctChange(grandAoB, grandAoA),
       },
     };
-  }, [sales, filters.depo, cmpMonthsToShow, cmpBulanAEffective, cmpBulanBEffective, cmpTahunA, cmpTahunB, compareDSR]);
+  }, [sales, filters.depo, cmpMonthsToShow, cmpBulanAEffective, cmpBulanBEffective, cmpTahunA, cmpTahunB, compareDSR, compareSupp]);
 
   const cmpTahunALabel = cmpTahunA.length ? [...cmpTahunA].sort((a, b) => a - b).join('+') : '-';
   const cmpTahunBLabel = cmpTahunB.length ? [...cmpTahunB].sort((a, b) => a - b).join('+') : '-';
@@ -540,7 +554,7 @@ export default function KinerjaDSR() {
             <div>
               <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
               <p className="text-xs text-ink-400">
-                Perbandingan penjualan &amp; AO antar dua kelompok tahun, per bulan · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)}
+                Perbandingan penjualan &amp; AO antar dua kelompok tahun, per bulan · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)}{compareSupp.length ? ` · ${compareSupp.join(', ')}` : ''}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
@@ -587,6 +601,15 @@ export default function KinerjaDSR() {
                   selected={compareDSR}
                   onChange={setCompareDSR}
                   allLabel="Semua DSR"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={suppOptionsForCompare.map((s) => ({ value: s, label: s }))}
+                  selected={compareSupp}
+                  onChange={setCompareSupp}
+                  allLabel="Semua Supplier"
                 />
               </div>
               <ExportMenu targetRef={dsrComparisonRef} filename="perbandingan-sales-dsr" />
