@@ -7,8 +7,15 @@ interface Series {
   name: string;
 }
 
+interface PctLabelConfig {
+  /** Series key whose bar gets the extra "% of target" label (e.g. 'Omset'). */
+  valueKey: string;
+  /** Data key holding the target to divide by (e.g. 'Target'). */
+  targetKey: string;
+}
+
 export default function BarChartCard({
-  data, xKey, series, height = 300, horizontal = false, valueFormatter, angledLabels = false, minWidth,
+  data, xKey, series, height = 300, horizontal = false, valueFormatter, angledLabels = false, minWidth, pctLabel,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
@@ -20,6 +27,8 @@ export default function BarChartCard({
   angledLabels?: boolean;
   /** When set, wraps the chart in a horizontally-scrollable container at least this wide (px), so many categories stay readable instead of being squeezed. */
   minWidth?: number;
+  /** When set, adds a second label above one series' bars showing valueKey/targetKey as a % (e.g. "87% dari target"). */
+  pctLabel?: PctLabelConfig;
 }) {
   // Tooltip always shows the full nominal; axis/bar labels use a compact
   // "688.9 Juta" / "1.2 M" form so long currency figures stay readable.
@@ -28,7 +37,7 @@ export default function BarChartCard({
 
   const chart = (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 28, right: 36, left: 0, bottom: angledLabels ? 56 : 8 }}>
+      <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: pctLabel ? 58 : 28, right: pctLabel && horizontal ? 80 : 36, left: 0, bottom: angledLabels ? 56 : 8 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-ink-100 dark:stroke-ink-800" />
         {horizontal ? (
           <>
@@ -56,6 +65,21 @@ export default function BarChartCard({
               style={{ fontSize: 10, fill: 'currentColor', fontWeight: 600 }}
               className="fill-ink-600 dark:fill-ink-300"
             />
+            {pctLabel && s.key === pctLabel.valueKey && (
+              <LabelList
+                position={horizontal ? 'right' : 'top'}
+                offset={horizontal ? 54 : 34}
+                valueAccessor={(entry) => {
+                  const payload = (entry as { payload?: Record<string, unknown> }).payload || {};
+                  const value = Number(payload[pctLabel.valueKey]) || 0;
+                  const target = Number(payload[pctLabel.targetKey]) || 0;
+                  if (target <= 0) return '';
+                  return `(${((value / target) * 100).toFixed(2).replace('.', ',')}%)`;
+                }}
+                style={{ fontSize: 10, fill: 'currentColor', fontWeight: 700 }}
+                className="fill-brand-600"
+              />
+            )}
           </Bar>
         ))}
       </BarChart>

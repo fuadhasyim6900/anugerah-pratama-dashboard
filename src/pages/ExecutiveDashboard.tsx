@@ -32,23 +32,42 @@ export default function ExecutiveDashboard() {
   const pencapaian = totalTarget ? (totalOmset / totalTarget) * 100 : 0;
 
   const omsetPerKota = useMemo(() => groupSumBy(filtered, 'kota').slice(0, 10), [filtered]);
-  const omsetPerDepo = useMemo(() => groupSumBy(filtered, 'depo'), [filtered]);
+  // Local Supplier filter scoped to the "Omset per Depo" chart only (same pattern as
+  // AO Persupplier / Ranking DSR per Supplier), on top of the main sidebar filters.
+  const omsetPerDepoSuppOptions = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.supp).filter(Boolean))).sort(),
+    [filtered]
+  );
+  const [omsetPerDepoSupp, setOmsetPerDepoSupp] = useState<string[]>([]);
+  useEffect(() => {
+    setOmsetPerDepoSupp((prev) => prev.filter((s) => omsetPerDepoSuppOptions.includes(s)));
+  }, [omsetPerDepoSuppOptions]);
+  const omsetPerDepoRows = useMemo(
+    () => (omsetPerDepoSupp.length ? filtered.filter((r) => omsetPerDepoSupp.includes(r.supp)) : filtered),
+    [filtered, omsetPerDepoSupp]
+  );
+  // Target lookup should follow the same effective supplier scope: the local filter
+  // when set, otherwise fall back to whatever the main sidebar Supplier filter is.
+  const omsetPerDepoEffectiveSupp = omsetPerDepoSupp.length ? omsetPerDepoSupp : filters.supp;
+  const omsetPerDepo = useMemo(() => groupSumBy(omsetPerDepoRows, 'depo'), [omsetPerDepoRows]);
   // Target per depo, matched to each depo's own Omset bar above, so the
   // "Omset per Depo" chart can show Target alongside Realisasi/Omset.
   const omsetPerDepoWithTarget = useMemo(
     () => omsetPerDepo.map((d) => ({
       label: d.label,
       Omset: d.value,
-      Target: sumTarget(targets, [d.label], monthsPresent, filters.tahun, filters.dsr, filters.supp),
+      Target: sumTarget(targets, [d.label], monthsPresent, filters.tahun, filters.dsr, omsetPerDepoEffectiveSupp),
     })),
-    [omsetPerDepo, targets, monthsPresent, filters.tahun, filters.dsr, filters.supp]
+    [omsetPerDepo, targets, monthsPresent, filters.tahun, filters.dsr, omsetPerDepoEffectiveSupp]
   );
   // Always the grand total across every depo for the selected Bulan/Tahun —
   // intentionally ignores the Depo filter itself, so picking e.g. "Jepara"
-  // still shows the total for all depo, not just Jepara's own number.
+  // still shows the total for all depo, not just Jepara's own number. Uses
+  // the same effective supplier scope as the chart below it (local filter
+  // when set, otherwise the main sidebar Supplier filter).
   const omsetPerDepoTotal = useMemo(
-    () => sumNominal(applyFilters(sales, { ...filters, depo: [] })),
-    [sales, filters]
+    () => sumNominal(applyFilters(sales, { ...filters, depo: [], supp: omsetPerDepoEffectiveSupp })),
+    [sales, filters, omsetPerDepoEffectiveSupp]
   );
   // Target vs realisasi per month (respect depo/tahun filter, ignore month filter so the trend is
   // visible). "Omset" mirrors "Realisasi" and is drawn as a line on top of the bars so the chart
@@ -197,12 +216,25 @@ export default function ExecutiveDashboard() {
           </div>
 
           <div className="card p-5" ref={omsetPerDepoRef}>
-            <div className="flex items-start justify-between gap-3 mb-1">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Omset per Depo</h3>
-              <ExportMenu targetRef={omsetPerDepoRef} filename="omset-per-depo" />
+              <div className="flex items-center gap-2">
+                <div className="w-44">
+                  <MultiSelect
+                    label="Supplier"
+                    options={omsetPerDepoSuppOptions.map((s) => ({ value: s, label: s }))}
+                    selected={omsetPerDepoSupp}
+                    onChange={setOmsetPerDepoSupp}
+                    allLabel="Semua Supplier"
+                  />
+                </div>
+                <ExportMenu targetRef={omsetPerDepoRef} filename="omset-per-depo" />
+              </div>
             </div>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <p className="text-xs text-ink-400">Distribusi penjualan di setiap depo, dengan Target masing-masing depo</p>
+              <p className="text-xs text-ink-400">
+                Distribusi penjualan di setiap depo, dengan Target masing-masing depo{omsetPerDepoSupp.length ? ` · ${omsetPerDepoSupp.join(', ')}` : ''}
+              </p>
               <p className="text-xs font-bold text-brand-600 whitespace-nowrap">
                 Total Semua Depo: {formatRupiah(omsetPerDepoTotal)}
               </p>
@@ -214,6 +246,7 @@ export default function ExecutiveDashboard() {
                 { key: 'Target', color: '#d9d9de', name: 'Target' },
                 { key: 'Omset', color: '#b91c1c', name: 'Omset' },
               ]}
+              pctLabel={{ valueKey: 'Omset', targetKey: 'Target' }}
               height={320}
             />
           </div>
@@ -238,6 +271,7 @@ export default function ExecutiveDashboard() {
               { key: 'Target', color: '#16a34a', name: 'Target (Tren)', dashed: true },
               { key: 'Omset', color: '#2563eb', name: 'Omset' },
             ]}
+            pctLabel={{ valueKey: 'Realisasi', targetKey: 'Target' }}
           />
         </div>
 
