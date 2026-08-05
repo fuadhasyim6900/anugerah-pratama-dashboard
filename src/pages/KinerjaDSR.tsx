@@ -344,6 +344,154 @@ export default function KinerjaDSR() {
           </div>
         </div>
 
+        <div className="card p-5" ref={dsrComparisonRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
+              <p className="text-xs text-ink-400">
+                Perbandingan penjualan &amp; AO antar dua kelompok tahun, per bulan · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)}{compareSupp.length ? ` · ${compareSupp.join(', ')}` : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-36">
+                <MultiSelect
+                  label="Tahun A"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={cmpTahunA.map(String)}
+                  onChange={(v) => setCmpTahunA(v.map(Number))}
+                  allLabel="Pilih Tahun A"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan Tahun A"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={cmpBulanA.map(String)}
+                  onChange={(v) => setCmpBulanA(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-36">
+                <MultiSelect
+                  label="Tahun B"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={cmpTahunB.map(String)}
+                  onChange={(v) => setCmpTahunB(v.map(Number))}
+                  allLabel="Pilih Tahun B"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan Tahun B"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={cmpBulanB.map(String)}
+                  onChange={(v) => setCmpBulanB(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Depo"
+                  options={depoOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.depo}
+                  onChange={filters.setDepo}
+                  allLabel="Semua Depo"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Nama DSR"
+                  options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
+                  selected={compareDSR}
+                  onChange={setCompareDSR}
+                  allLabel="Semua DSR"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={suppOptionsForCompare.map((s) => ({ value: s, label: s }))}
+                  selected={compareSupp}
+                  onChange={setCompareSupp}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <ExportMenu targetRef={dsrComparisonRef} filename="perbandingan-sales-dsr" />
+            </div>
+          </div>
+
+          <p className="text-xs text-ink-400 mb-2">
+            Penjualan (bar, sumbu kiri) &amp; AO (garis, sumbu kanan) per bulan — Pertumbuhan Sales (%) &amp; Pertumbuhan AO (%) tidak ditampilkan di grafik ini, lihat kolomnya di tabel di bawah.
+          </p>
+          <DualAxisComboChart
+            data={dsrSalesComparison.rows}
+            xKey="bulan"
+            bars={[
+              { key: 'salesA', color: CMP_COLORS.salesA, name: `Penjualan ${cmpTahunALabel}` },
+              { key: 'salesB', color: CMP_COLORS.salesB, name: `Penjualan ${cmpTahunBLabel}` },
+            ]}
+            lines={[
+              { key: 'aoA', color: CMP_COLORS.aoA, name: `AO ${cmpTahunALabel}`, dashed: true },
+              { key: 'aoB', color: CMP_COLORS.aoB, name: `AO ${cmpTahunBLabel}` },
+            ]}
+            leftFormatter={(v) => formatCompactRupiah(v)}
+            leftTooltipFormatter={(v) => formatRupiah(v)}
+            rightFormatter={(v) => formatNumber(v)}
+            rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
+          />
+
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Bulan</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
+                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dsrSalesComparison.rows.map((m) => (
+                  <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesA }}>{m.inA ? formatRupiah(m.salesA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesB }}>{m.inB ? formatRupiah(m.salesB) : '-'}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoA }}>{m.inA ? formatNumber(m.aoA) : '-'}</td>
+                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoB }}>{m.inB ? formatNumber(m.aoB) : '-'}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+                {dsrSalesComparison.rows.length === 0 && (
+                  <tr><td colSpan={7} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {dsrSalesComparison.grandTotal && dsrSalesComparison.rows.length > 0 && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dsrSalesComparison.grandTotal.salesGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoA }}>{formatNumber(dsrSalesComparison.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoB }}>{formatNumber(dsrSalesComparison.grandTotal.aoB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dsrSalesComparison.grandTotal.aoGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr] gap-6">
           <div className="card p-4">
             <h3 className="font-bold text-sm mb-3">Daftar DSR</h3>
@@ -549,144 +697,6 @@ export default function KinerjaDSR() {
           </p>
         </div>
 
-        <div className="card p-5" ref={dsrComparisonRef}>
-          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-            <div>
-              <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
-              <p className="text-xs text-ink-400">
-                Perbandingan penjualan &amp; AO antar dua kelompok tahun, per bulan · {depoLabel(filters.depo)} · {bulanLabel(filters.bulan)}{compareSupp.length ? ` · ${compareSupp.join(', ')}` : ''}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
-              <div className="w-full sm:w-36">
-                <MultiSelect
-                  label="Tahun A"
-                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
-                  selected={cmpTahunA.map(String)}
-                  onChange={(v) => setCmpTahunA(v.map(Number))}
-                  allLabel="Pilih Tahun A"
-                />
-              </div>
-              <div className="w-full sm:w-44">
-                <MultiSelect
-                  label="Bulan Tahun A"
-                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-                  selected={cmpBulanA.map(String)}
-                  onChange={(v) => setCmpBulanA(v.map(Number))}
-                  allLabel="Semua Bulan (YTD)"
-                />
-              </div>
-              <div className="w-full sm:w-36">
-                <MultiSelect
-                  label="Tahun B"
-                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
-                  selected={cmpTahunB.map(String)}
-                  onChange={(v) => setCmpTahunB(v.map(Number))}
-                  allLabel="Pilih Tahun B"
-                />
-              </div>
-              <div className="w-full sm:w-44">
-                <MultiSelect
-                  label="Bulan Tahun B"
-                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-                  selected={cmpBulanB.map(String)}
-                  onChange={(v) => setCmpBulanB(v.map(Number))}
-                  allLabel="Semua Bulan (YTD)"
-                />
-              </div>
-              <div className="w-full sm:w-48">
-                <MultiSelect
-                  label="Nama DSR"
-                  options={dsrOptionsForCompare.map((d) => ({ value: d, label: d }))}
-                  selected={compareDSR}
-                  onChange={setCompareDSR}
-                  allLabel="Semua DSR"
-                />
-              </div>
-              <div className="w-full sm:w-48">
-                <MultiSelect
-                  label="Supplier"
-                  options={suppOptionsForCompare.map((s) => ({ value: s, label: s }))}
-                  selected={compareSupp}
-                  onChange={setCompareSupp}
-                  allLabel="Semua Supplier"
-                />
-              </div>
-              <ExportMenu targetRef={dsrComparisonRef} filename="perbandingan-sales-dsr" />
-            </div>
-          </div>
-
-          <p className="text-xs text-ink-400 mb-2">
-            Penjualan (bar, sumbu kiri) &amp; AO (garis, sumbu kanan) per bulan — Pertumbuhan Sales (%) &amp; Pertumbuhan AO (%) tidak ditampilkan di grafik ini, lihat kolomnya di tabel di bawah.
-          </p>
-          <DualAxisComboChart
-            data={dsrSalesComparison.rows}
-            xKey="bulan"
-            bars={[
-              { key: 'salesA', color: CMP_COLORS.salesA, name: `Penjualan ${cmpTahunALabel}` },
-              { key: 'salesB', color: CMP_COLORS.salesB, name: `Penjualan ${cmpTahunBLabel}` },
-            ]}
-            lines={[
-              { key: 'aoA', color: CMP_COLORS.aoA, name: `AO ${cmpTahunALabel}`, dashed: true },
-              { key: 'aoB', color: CMP_COLORS.aoB, name: `AO ${cmpTahunBLabel}` },
-            ]}
-            leftFormatter={(v) => formatCompactRupiah(v)}
-            leftTooltipFormatter={(v) => formatRupiah(v)}
-            rightFormatter={(v) => formatNumber(v)}
-            rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
-          />
-
-          <div className="overflow-x-auto mt-4">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
-                  <th className="py-2 pr-3">Bulan</th>
-                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunALabel}</th>
-                  <th className="py-2 pr-3 text-right">Penjualan Tahun {cmpTahunBLabel}</th>
-                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
-                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunALabel}</th>
-                  <th className="py-2 pr-3 text-right">AO Tahun {cmpTahunBLabel}</th>
-                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dsrSalesComparison.rows.map((m) => (
-                  <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
-                    <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
-                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesA }}>{m.inA ? formatRupiah(m.salesA) : '-'}</td>
-                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesB }}>{m.inB ? formatRupiah(m.salesB) : '-'}</td>
-                    <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
-                      {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoA }}>{m.inA ? formatNumber(m.aoA) : '-'}</td>
-                    <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.aoB }}>{m.inB ? formatNumber(m.aoB) : '-'}</td>
-                    <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
-                      {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
-                    </td>
-                  </tr>
-                ))}
-                {dsrSalesComparison.rows.length === 0 && (
-                  <tr><td colSpan={7} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
-                )}
-                {dsrSalesComparison.grandTotal && dsrSalesComparison.rows.length > 0 && (
-                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
-                    <td className="py-2.5 pr-3">Grand Total</td>
-                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
-                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
-                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
-                      {dsrSalesComparison.grandTotal.salesGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.salesGrowth.toFixed(1)}%`}
-                    </td>
-                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoA }}>{formatNumber(dsrSalesComparison.grandTotal.aoA)}</td>
-                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoB }}>{formatNumber(dsrSalesComparison.grandTotal.aoB)}</td>
-                    <td className={`py-2.5 pr-3 text-right ${dsrSalesComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : dsrSalesComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
-                      {dsrSalesComparison.grandTotal.aoGrowth === null ? '-' : `${dsrSalesComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${dsrSalesComparison.grandTotal.aoGrowth.toFixed(1)}%`}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         <div className="card p-5" ref={targetVsOmsetRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
