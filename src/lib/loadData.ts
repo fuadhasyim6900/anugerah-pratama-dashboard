@@ -1,5 +1,5 @@
 import { supabase, supabaseConfigError } from './supabaseClient';
-import type { SalesRow, TargetRow } from './types';
+import type { SalesRow, TargetRow, UangMasukRow } from './types';
 import { normalizeBulanToMonthNum } from './types';
 
 // Data sekarang disimpan di Supabase (tabel `sales` dan `targets`), bukan lagi
@@ -107,6 +107,35 @@ export async function loadDataSyncedAt(): Promise<Date | null> {
 
   if (error || !data?.synced_at) return null;
   return new Date(data.synced_at);
+}
+
+interface UangMasukDbRow {
+  tahun: number;
+  bulan: string;
+  depo: string;
+  target_piutang: number;
+  realisasi_piutang: number;
+}
+
+export async function loadUangMasukData(): Promise<UangMasukRow[]> {
+  const rows = await fetchAllRows<UangMasukDbRow>(
+    'uang_masuk',
+    'tahun, bulan, depo, target_piutang, realisasi_piutang'
+  );
+
+  return rows
+    .map((r): UangMasukRow => {
+      const bulanRaw = String(r.bulan ?? '').trim();
+      return {
+        tahun: r.tahun ?? 2026,
+        bulan: bulanRaw,
+        monthNum: normalizeBulanToMonthNum(bulanRaw),
+        depo: String(r.depo ?? '').trim().toUpperCase(),
+        targetPiutang: Number(r.target_piutang) || 0,
+        realisasiPiutang: Number(r.realisasi_piutang) || 0,
+      };
+    })
+    .filter((r) => r.depo);
 }
 
 export async function loadTargetData(): Promise<TargetRow[]> {

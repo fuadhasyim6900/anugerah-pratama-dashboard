@@ -19,6 +19,18 @@ export interface TargetRow {
   monthly: number[]; // index 0 = Jan ... 11 = Dec
 }
 
+// Realisasi Uang Masuk (penagihan piutang): satu baris per Depo per Bulan
+// per Tahun, dari file "REALISASI UANG MASUK.xlsx" (kolom TAHUN, BULAN,
+// DEPO, TARGET PIUTANG, REALISASI PIUTANG).
+export interface UangMasukRow {
+  tahun: number;
+  bulan: string;     // raw month text e.g. "Jul"
+  monthNum: number;  // 1-12, derived from bulan
+  depo: string;
+  targetPiutang: number;
+  realisasiPiutang: number;
+}
+
 export const MONTH_NAMES_ID = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
   'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',

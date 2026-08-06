@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import type { SalesRow, TargetRow } from '../lib/types';
-import { loadSalesData, loadTargetData, loadDataSyncedAt } from '../lib/loadData';
+import type { SalesRow, TargetRow, UangMasukRow } from '../lib/types';
+import { loadSalesData, loadTargetData, loadUangMasukData, loadDataSyncedAt } from '../lib/loadData';
 
 interface DataContextValue {
   sales: SalesRow[];
   targets: TargetRow[];
+  uangMasuk: UangMasukRow[];
   loading: boolean;
   error: string | null;
   reload: () => void;
@@ -18,6 +19,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales] = useState<SalesRow[]>([]);
   const [targets, setTargets] = useState<TargetRow[]>([]);
+  const [uangMasuk, setUangMasuk] = useState<UangMasukRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -27,9 +29,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [s, t, syncedAt] = await Promise.all([loadSalesData(), loadTargetData(), loadDataSyncedAt()]);
+      // `uang_masuk` gagal dimuat secara terpisah (dan tidak menggagalkan
+      // seluruh dashboard) selama tabelnya belum dibuat di Supabase — lihat
+      // README bagian "Realisasi Uang Masuk" untuk cara membuatnya.
+      const [s, t, syncedAt, u] = await Promise.all([
+        loadSalesData(),
+        loadTargetData(),
+        loadDataSyncedAt(),
+        loadUangMasukData().catch(() => [] as UangMasukRow[]),
+      ]);
       setSales(s);
       setTargets(t);
+      setUangMasuk(u);
       setDataUpdatedAt(syncedAt);
       setLastUpdated(new Date());
     } catch (e) {
@@ -42,7 +53,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <DataContext.Provider value={{ sales, targets, loading, error, reload: load, lastUpdated, dataUpdatedAt }}>
+    <DataContext.Provider value={{ sales, targets, uangMasuk, loading, error, reload: load, lastUpdated, dataUpdatedAt }}>
       {children}
     </DataContext.Provider>
   );

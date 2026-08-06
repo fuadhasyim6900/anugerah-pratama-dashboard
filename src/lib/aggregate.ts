@@ -1,4 +1,4 @@
-import type { SalesRow, TargetRow } from './types';
+import type { SalesRow, TargetRow, UangMasukRow } from './types';
 import { MONTH_NAMES_ID } from './types';
 
 export interface Filters {
@@ -404,6 +404,93 @@ export function targetVsOmsetBySupplier(
       kekurangan: grandKekurangan,
       kekuranganPct: grandTarget ? (grandKekurangan / grandTarget) * 100 : null,
       ao: grandAO,
+    },
+  };
+}
+
+// --- Realisasi Uang Masuk (penagihan piutang) -----------------------------
+// Filter yang sama (Depo/Bulan/Tahun) dari sidebar dipakai di sini juga,
+// supaya konsisten dengan halaman lain — DSR & Supplier tidak relevan untuk
+// data ini karena sumbernya per Depo per Bulan (bukan per transaksi).
+export function applyUangMasukFilters(
+  rows: UangMasukRow[],
+  f: { depo: string[]; bulan: number[]; tahun: number[] }
+): UangMasukRow[] {
+  return rows.filter((r) => {
+    if (f.tahun.length && !f.tahun.includes(r.tahun)) return false;
+    if (f.depo.length && !f.depo.includes(r.depo)) return false;
+    if (f.bulan.length && !f.bulan.includes(r.monthNum)) return false;
+    return true;
+  });
+}
+
+export function sumTargetPiutang(rows: UangMasukRow[]): number {
+  return rows.reduce((acc, r) => acc + r.targetPiutang, 0);
+}
+
+export function sumRealisasiPiutang(rows: UangMasukRow[]): number {
+  return rows.reduce((acc, r) => acc + r.realisasiPiutang, 0);
+}
+
+// Target vs Realisasi Piutang per bulan (mengabaikan filter Bulan supaya
+// tetap terlihat sebagai tren), untuk grafik combo (bar + garis tren).
+export function uangMasukTrendByMonth(
+  rows: UangMasukRow[]
+): { bulan: string; monthNum: number; Target: number; Realisasi: number }[] {
+  const map = new Map<number, { target: number; realisasi: number }>();
+  for (const r of rows) {
+    const entry = map.get(r.monthNum) || { target: 0, realisasi: 0 };
+    entry.target += r.targetPiutang;
+    entry.realisasi += r.realisasiPiutang;
+    map.set(r.monthNum, entry);
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([m, v]) => ({
+      bulan: MONTH_NAMES_ID[m - 1] || String(m),
+      monthNum: m,
+      Target: v.target,
+      Realisasi: v.realisasi,
+    }));
+}
+
+export interface UangMasukDepoRow {
+  depo: string;
+  target: number;
+  realisasi: number;
+  pencapaianPct: number | null; // null saat target = 0
+}
+
+// Target & Realisasi Piutang dikelompokkan per Depo, diurutkan dari
+// realisasi tertinggi ke terendah — dipakai untuk grafik & tabel rincian
+// per depo.
+export function uangMasukByDepo(rows: UangMasukRow[]): { rows: UangMasukDepoRow[]; grandTotal: UangMasukDepoRow } {
+  const map = new Map<string, { target: number; realisasi: number }>();
+  for (const r of rows) {
+    const entry = map.get(r.depo) || { target: 0, realisasi: 0 };
+    entry.target += r.targetPiutang;
+    entry.realisasi += r.realisasiPiutang;
+    map.set(r.depo, entry);
+  }
+  const rowsOut: UangMasukDepoRow[] = Array.from(map.entries())
+    .map(([depo, v]) => ({
+      depo,
+      target: v.target,
+      realisasi: v.realisasi,
+      pencapaianPct: v.target ? (v.realisasi / v.target) * 100 : null,
+    }))
+    .sort((a, b) => b.realisasi - a.realisasi);
+
+  const grandTarget = rowsOut.reduce((a, r) => a + r.target, 0);
+  const grandRealisasi = rowsOut.reduce((a, r) => a + r.realisasi, 0);
+
+  return {
+    rows: rowsOut,
+    grandTotal: {
+      depo: 'Grand Total',
+      target: grandTarget,
+      realisasi: grandRealisasi,
+      pencapaianPct: grandTarget ? (grandRealisasi / grandTarget) * 100 : null,
     },
   };
 }

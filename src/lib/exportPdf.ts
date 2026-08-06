@@ -17,6 +17,7 @@ export const REPORT_ROUTES: { path: string; title: string }[] = [
   { path: '/kinerja-dsr', title: 'Kinerja DSR' },
   { path: '/proyeksi-s2', title: 'Proyeksi Semester' },
   { path: '/review-dsr', title: 'Review Kinerja DSR & Solusi Strategis' },
+  { path: '/realisasi-uang-masuk', title: 'Realisasi Uang Masuk' },
 ];
 
 const PAGE_CONTENT_ID = 'page-content';

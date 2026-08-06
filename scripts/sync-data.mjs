@@ -38,6 +38,7 @@ const supabase = createClient(SUPABASE_URL, SECRET_KEY);
 
 const SALES_XLSX = path.join(ROOT, 'public/data/DATA.xlsx');
 const TARGET_XLSX = path.join(ROOT, 'public/data/DATA_TARGET_FUAD.xlsx');
+const UANG_MASUK_XLSX = path.join(ROOT, 'public/data/REALISASI UANG MASUK.xlsx');
 const BATCH_SIZE = 500;
 
 function toNumber(v) {
@@ -130,6 +131,40 @@ async function syncTargets() {
   await insertBatched('targets', rows);
 }
 
+async function syncUangMasuk() {
+  // Tabel `uang_masuk` bersifat opsional — kalau file sumbernya belum ada
+  // (atau tabelnya belum dibuat di Supabase, lihat README), lewati saja
+  // tanpa menggagalkan sinkronisasi sales/targets.
+  if (!fs.existsSync(UANG_MASUK_XLSX)) {
+    console.log(`Melewati "uang_masuk": file tidak ditemukan (${UANG_MASUK_XLSX}).`);
+    return;
+  }
+  const raw = readSheet(UANG_MASUK_XLSX);
+  const rows = raw
+    .map((r) => {
+      const row = normalizeRow(r);
+      return {
+        tahun: row['TAHUN'] ? Number(row['TAHUN']) : new Date().getFullYear(),
+        bulan: String(row['BULAN'] ?? '').trim(),
+        depo: String(row['DEPO'] ?? '').trim().toUpperCase(),
+        target_piutang: toNumber(row['TARGET PIUTANG']),
+        realisasi_piutang: toNumber(row['REALISASI PIUTANG']),
+      };
+    })
+    .filter((r) => r.depo);
+
+  try {
+    await deleteAll('uang_masuk');
+    await insertBatched('uang_masuk', rows);
+  } catch (err) {
+    console.error(
+      `\nGAGAL sinkronisasi "uang_masuk": ${err.message}\n` +
+        'Pastikan tabel "uang_masuk" sudah dibuat di Supabase (lihat README, bagian "Realisasi Uang Masuk").\n' +
+        'Melanjutkan tanpa menyinkronkan data ini...'
+    );
+  }
+}
+
 async function updateSyncedAt() {
   console.log('Mencatat waktu update data...');
   const { error } = await supabase
@@ -142,6 +177,7 @@ async function main() {
   console.log('=== Sinkronisasi data Excel -> Supabase ===\n');
   await syncSales();
   await syncTargets();
+  await syncUangMasuk();
   await updateSyncedAt();
   console.log('\nSelesai! Buka dashboard Anda dan refresh untuk lihat data terbaru.');
 }

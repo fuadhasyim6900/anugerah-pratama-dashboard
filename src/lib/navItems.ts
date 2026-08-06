@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, TrendingUp, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, TrendingUp, ClipboardList, Wallet } from 'lucide-react';
 
 export interface NavSection {
   /** Matches the `id` attribute on that section's card in the page. */
@@ -51,5 +51,13 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { to: '/review-dsr', label: 'Review & Solusi DSR', shortLabel: 'Review', icon: ClipboardList },
+  {
+    to: '/realisasi-uang-masuk', label: 'Realisasi Uang Masuk', shortLabel: 'Uang Masuk', icon: Wallet,
+    sections: [
+      { id: 'sec-tren-uang-masuk', label: 'Tren Target vs Realisasi' },
+      { id: 'sec-uang-masuk-per-depo', label: 'Realisasi Piutang per Depo' },
+      { id: 'sec-tabel-uang-masuk-per-depo', label: 'Tabel Rincian per Depo' },
+    ],
+  },
 ];
 

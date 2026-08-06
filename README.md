@@ -51,6 +51,41 @@ create policy "Allow public read" on data_meta
 
 Setelah itu, setiap kali Anda menjalankan `node scripts/sync-data.mjs`, waktu sync otomatis tercatat ke tabel ini dan langsung muncul di dashboard setelah Anda klik **Refresh**. Tidak perlu setup tambahan apa pun — kalau tabel ini belum dibuat, dashboard tetap jalan normal, hanya saja baris "Data terakhir diupdate" belum muncul.
 
+## Realisasi Uang Masuk
+
+Halaman **Realisasi Uang Masuk** menampilkan target & realisasi penagihan piutang per depo per bulan, dari file `REALISASI UANG MASUK.xlsx` (kolom `TAHUN`, `BULAN`, `DEPO`, `TARGET PIUTANG`, `REALISASI PIUTANG`), disinkronkan ke tabel `uang_masuk` di Supabase — pola yang sama seperti tabel `sales` & `targets`.
+
+Karena tabel ini **belum ada** di Supabase Anda, buat dulu (sekali saja) lewat **SQL Editor**:
+
+```sql
+create table if not exists uang_masuk (
+  id bigint generated always as identity primary key,
+  tahun int not null,
+  bulan text not null,
+  depo text not null,
+  target_piutang numeric not null default 0,
+  realisasi_piutang numeric not null default 0
+);
+
+create index if not exists uang_masuk_tahun_idx on uang_masuk (tahun);
+create index if not exists uang_masuk_depo_idx on uang_masuk (depo);
+
+alter table uang_masuk enable row level security;
+
+create policy "Allow public read" on uang_masuk
+  for select using (true);
+```
+
+(Query yang sama juga tersedia di file `supabase_uang_masuk.sql` di root proyek ini.)
+
+Setelah tabel dibuat, letakkan `REALISASI UANG MASUK.xlsx` di `public/data/` (nama file harus persis sama) lalu jalankan:
+
+```bash
+node scripts/sync-data.mjs
+```
+
+Script ini sekarang juga menyinkronkan `uang_masuk` sekaligus dengan `sales` & `targets`. Kalau tabelnya belum dibuat, sinkronisasi data ini akan gagal dengan pesan yang jelas tapi **tidak** menggagalkan sinkronisasi `sales`/`targets`. Di dashboard sendiri, sebelum tabelnya dibuat, halaman Realisasi Uang Masuk akan menampilkan pesan "Data belum tersedia" alih-alih error — halaman lain tetap berjalan normal.
+
 ## Menjalankan secara lokal
 
 ```bash
