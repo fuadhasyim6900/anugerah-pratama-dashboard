@@ -1,4 +1,5 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
+import { useThemeStore } from '../../store/theme';
 import { formatRupiah, formatCompactRupiah } from '../../lib/aggregate';
 
 interface Series {
@@ -22,6 +23,12 @@ export default function LineChartCard({
   // stay readable instead of overlapping.
   const fmtFull = valueFormatter || ((v: number) => formatRupiah(v));
   const fmtLabel = valueFormatter || ((v: number) => formatCompactRupiah(v));
+  // See DsrRankingChart.tsx: `dark:fill-*` classes stay applied to print
+  // output even though the print stylesheet forces a white page background
+  // (the `.dark` class itself isn't removed), which can leave labels too
+  // light to read on paper/PDF. Use an explicit hex per mode instead.
+  const dark = useThemeStore((s) => s.dark);
+  const valueLabelColor = dark ? '#d9d9de' : '#52525c'; // ink-200 / ink-600
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -47,8 +54,7 @@ export default function LineChartCard({
               dataKey={s.key}
               position="top"
               formatter={(v: unknown) => fmtLabel(Number(v))}
-              style={{ fontSize: 10, fontWeight: 600 }}
-              className="fill-ink-600 dark:fill-ink-300"
+              style={{ fontSize: 10, fontWeight: 600, fill: valueLabelColor }}
             />
           </Line>
         ))}

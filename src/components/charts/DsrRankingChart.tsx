@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 import { formatRupiah, formatCompactRupiah } from '../../lib/aggregate';
+import { useThemeStore } from '../../store/theme';
 
 export interface DsrRankingRow {
   dsr: string;
@@ -27,6 +28,16 @@ export default function DsrRankingChart({
   // scroll wrapper below) instead of height like the old horizontal layout.
   const chartHeight = height ?? 380;
   const chartWidth = Math.max(data.length * 90, 480);
+  // `currentColor` + a Tailwind `fill-*` class doesn't actually work here —
+  // Recharts applies `style` directly on the SVG <text>, and an inline
+  // style always wins over a class. That left the label color tied to
+  // whatever `color` it inherited (fine on screen, but invisible-on-white
+  // once printed/exported in dark mode, or dropped entirely by
+  // html2canvas). Use explicit hex values instead so the color is baked in
+  // no matter how the chart is rendered.
+  const dark = useThemeStore((s) => s.dark);
+  const targetLabelColor = dark ? '#8b8b96' : '#6b6b76'; // ink-400 / ink-500
+  const omsetLabelColor = dark ? '#f87171' : '#dc2626'; // brand-400 / brand-600
 
   const chartData = data.map((d) => ({
     ...d,
@@ -58,16 +69,14 @@ export default function DsrRankingChart({
                 dataKey="Target"
                 position="top"
                 formatter={(v: unknown) => formatCompactRupiah(Number(v))}
-                style={{ fontSize: 10, fill: 'currentColor', fontWeight: 600 }}
-                className="fill-ink-500 dark:fill-ink-400"
+                style={{ fontSize: 10, fill: targetLabelColor, fontWeight: 600 }}
               />
             </Bar>
             <Bar dataKey="Omset" name="Omset" fill="#dc2626" radius={[4, 4, 0, 0]}>
               <LabelList
                 dataKey="omsetLabel"
                 position="top"
-                style={{ fontSize: 10, fill: 'currentColor', fontWeight: 700 }}
-                className="fill-brand-600 dark:fill-brand-400"
+                style={{ fontSize: 10, fill: omsetLabelColor, fontWeight: 700 }}
               />
             </Bar>
           </BarChart>

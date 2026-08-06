@@ -2,6 +2,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList,
 } from 'recharts';
 import { formatRupiah, formatCompactRupiah } from '../../lib/aggregate';
+import { useThemeStore } from '../../store/theme';
 
 interface BarSeries {
   key: string;
@@ -39,6 +40,12 @@ export default function ComboChartCard({
 }) {
   const fmtFull = valueFormatter || ((v: number) => formatRupiah(v));
   const fmtLabel = valueFormatter || ((v: number) => formatCompactRupiah(v));
+  // See DsrRankingChart.tsx: `currentColor` + a `fill-*` class doesn't work
+  // (inline style always wins), so labels lose their color once dark mode
+  // is combined with print/export. Use explicit hex instead.
+  const dark = useThemeStore((s) => s.dark);
+  const valueLabelColor = dark ? '#d9d9de' : '#52525c'; // ink-200 / ink-600
+  const pctLabelColor = '#dc2626'; // brand-600
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -54,8 +61,7 @@ export default function ComboChartCard({
               dataKey={s.key}
               position="top"
               formatter={(v: unknown) => fmtLabel(Number(v))}
-              style={{ fontSize: 10, fill: 'currentColor', fontWeight: 600 }}
-              className="fill-ink-600 dark:fill-ink-300"
+              style={{ fontSize: 10, fill: valueLabelColor, fontWeight: 600 }}
             />
             {pctLabel && s.key === pctLabel.valueKey && (
               <LabelList
@@ -68,8 +74,7 @@ export default function ComboChartCard({
                   if (target <= 0) return '';
                   return `(${((value / target) * 100).toFixed(2).replace('.', ',')}%)`;
                 }}
-                style={{ fontSize: 10, fill: 'currentColor', fontWeight: 700 }}
-                className="fill-brand-600"
+                style={{ fontSize: 10, fill: pctLabelColor, fontWeight: 700 }}
               />
             )}
           </Bar>
