@@ -198,7 +198,7 @@ export default function ProyeksiS2() {
           )}
         </div>
 
-        <div className="card p-5" ref={trenChartRef}>
+        <div id="sec-tren-proyeksi" className="card p-5 scroll-mt-28" ref={trenChartRef}>
           <div className="flex items-start justify-between gap-3 mb-1">
             <h3 className="font-bold text-sm">Grafik Tren Penjualan {periodLabel} ({currentYear - 1} vs {currentYear} Proyeksi)</h3>
             <ExportMenu targetRef={trenChartRef} filename="tren-penjualan-proyeksi" />
@@ -216,7 +216,7 @@ export default function ProyeksiS2() {
           />
         </div>
 
-        <div className="card p-5" ref={rincianTableRef}>
+        <div id="sec-rincian-proyeksi" className="card p-5 scroll-mt-28" ref={rincianTableRef}>
           <div className="flex items-start justify-between gap-3 mb-1">
             <h3 className="font-bold text-sm">Rincian Bulanan Proyeksi {periodLabel} ({currentYear} vs {currentYear - 1})</h3>
             <ExportMenu targetRef={rincianTableRef} filename="rincian-bulanan-proyeksi" />

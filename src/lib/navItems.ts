@@ -1,16 +1,55 @@
 import type { LucideIcon } from 'lucide-react';
 import { LayoutDashboard, Users, TrendingUp, ClipboardList } from 'lucide-react';
 
+export interface NavSection {
+  /** Matches the `id` attribute on that section's card in the page. */
+  id: string;
+  label: string;
+}
+
 export interface NavItem {
   to: string;
   label: string;
   shortLabel: string; // compact label for the mobile bottom tab bar
   icon: LucideIcon;
+  /**
+   * Chart/table sections within that page, shown as a collapsible list
+   * under the sidebar link so people can jump straight to one and see
+   * what's on the page at a glance. Deliberately excludes KPI cards and
+   * filter/settings panels — only the actual chart/table content blocks.
+   */
+  sections?: NavSection[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Executive Dashboard', shortLabel: 'Dashboard', icon: LayoutDashboard },
-  { to: '/kinerja-dsr', label: 'Kinerja DSR', shortLabel: 'DSR', icon: Users },
-  { to: '/proyeksi-s2', label: 'Proyeksi Semester', shortLabel: 'Proyeksi', icon: TrendingUp },
+  {
+    to: '/', label: 'Executive Dashboard', shortLabel: 'Dashboard', icon: LayoutDashboard,
+    sections: [
+      { id: 'sec-omset-per-kota', label: 'Omset per Kota' },
+      { id: 'sec-omset-per-depo', label: 'Omset per Depo' },
+      { id: 'sec-target-vs-realisasi', label: 'Target vs Realisasi' },
+      { id: 'sec-ao-persupplier', label: 'AO Persupplier' },
+      { id: 'sec-perbandingan-bulanan', label: 'Perbandingan Bulanan' },
+    ],
+  },
+  {
+    to: '/kinerja-dsr', label: 'Kinerja DSR', shortLabel: 'DSR', icon: Users,
+    sections: [
+      { id: 'sec-peringkat-dsr', label: 'Peringkat Penjualan DSR' },
+      { id: 'sec-ao-dsr', label: 'Outlet Aktif (AO) DSR' },
+      { id: 'sec-perbandingan-dsr', label: 'Perbandingan Sales DSR' },
+      { id: 'sec-distribusi-supplier-dsr', label: 'Distribusi Produk / Supplier DSR' },
+      { id: 'sec-ranking-dsr-supplier', label: 'Ranking DSR per Supplier' },
+      { id: 'sec-target-omset-supplier', label: 'Target vs Omset per Supplier' },
+    ],
+  },
+  {
+    to: '/proyeksi-s2', label: 'Proyeksi Semester', shortLabel: 'Proyeksi', icon: TrendingUp,
+    sections: [
+      { id: 'sec-tren-proyeksi', label: 'Grafik Tren Penjualan' },
+      { id: 'sec-rincian-proyeksi', label: 'Rincian Bulanan Proyeksi' },
+    ],
+  },
   { to: '/review-dsr', label: 'Review & Solusi DSR', shortLabel: 'Review', icon: ClipboardList },
 ];
+

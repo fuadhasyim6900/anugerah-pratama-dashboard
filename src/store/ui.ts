@@ -7,6 +7,13 @@ interface UIStore {
   /** Mobile (<md): true = off-canvas drawer is open */
   mobileNavOpen: boolean;
   setMobileNavOpen: (v: boolean) => void;
+  /**
+   * Section id (see navItems.ts) to scroll to once the target page has
+   * rendered — set when a sidebar sub-link is clicked from a different
+   * page, consumed once by the Layout after navigation completes.
+   */
+  scrollTargetId: string | null;
+  setScrollTargetId: (id: string | null) => void;
 }
 
 const STORAGE_KEY = 'ap-dashboard-sidebar-collapsed';
@@ -28,4 +35,6 @@ export const useUIStore = create<UIStore>((set, get) => ({
   },
   mobileNavOpen: false,
   setMobileNavOpen: (v) => set({ mobileNavOpen: v }),
+  scrollTargetId: null,
+  setScrollTargetId: (id) => set({ scrollTargetId: id }),
 }));

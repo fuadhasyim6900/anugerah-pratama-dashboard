@@ -1,5 +1,5 @@
-import { NavLink } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useFilterStore } from '../store/filters';
 import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
@@ -9,7 +9,7 @@ import { NAV_ITEMS } from '../lib/navItems';
 import MultiSelect from './MultiSelect';
 import clsx from 'clsx';
 import {
-  Building2, UserRound, PackageSearch, CalendarDays, CalendarRange, X,
+  Building2, UserRound, PackageSearch, CalendarDays, CalendarRange, X, ChevronDown,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -55,6 +55,30 @@ export default function Sidebar() {
   }, [years.join(','), sales.length]);
 
   const { sidebarCollapsed, mobileNavOpen, setMobileNavOpen } = useUIStore();
+  const setScrollTargetId = useUIStore((s) => s.setScrollTargetId);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Which nav items' section lists are expanded. Starts with the current
+  // page's own sections open, so people land on a page and immediately see
+  // its table of contents without an extra click.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(NAV_ITEMS.filter((n) => n.to === location.pathname).map((n) => n.to))
+  );
+
+  function toggleExpanded(to: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(to)) next.delete(to); else next.add(to);
+      return next;
+    });
+  }
+
+  function goToSection(pageTo: string, sectionId: string) {
+    setScrollTargetId(sectionId);
+    if (location.pathname !== pageTo) navigate(pageTo);
+    setMobileNavOpen(false);
+  }
 
   return (
     <>
@@ -93,23 +117,65 @@ export default function Sidebar() {
         </div>
 
         <nav className="shrink-0 px-3 py-4 space-y-1">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={() => setMobileNavOpen(false)}
-              className={({ isActive }) => clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                isActive
-                  ? 'bg-brand-600 text-white shadow-card'
-                  : 'text-ink-600 dark:text-ink-300 hover:bg-brand-50 dark:hover:bg-ink-800 hover:text-brand-700 dark:hover:text-brand-400'
-              )}
-            >
-              <Icon size={18} strokeWidth={2.2} />
-              {label}
-            </NavLink>
-          ))}
+          {NAV_ITEMS.map(({ to, label, icon: Icon, sections }) => {
+            const isOpen = expanded.has(to);
+            return (
+              <div key={to}>
+                <div
+                  className={clsx(
+                    'flex items-center rounded-lg text-sm font-semibold transition-colors',
+                    location.pathname === to
+                      ? 'bg-brand-600 text-white shadow-card'
+                      : 'text-ink-600 dark:text-ink-300 hover:bg-brand-50 dark:hover:bg-ink-800 hover:text-brand-700 dark:hover:text-brand-400'
+                  )}
+                >
+                  <NavLink
+                    to={to}
+                    end={to === '/'}
+                    onClick={() => setMobileNavOpen(false)}
+                    className="flex-1 flex items-center gap-3 px-3 py-2.5 min-w-0"
+                  >
+                    <Icon size={18} strokeWidth={2.2} className="shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </NavLink>
+                  {sections && sections.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(to)}
+                      aria-label={isOpen ? `Tutup daftar isi ${label}` : `Buka daftar isi ${label}`}
+                      aria-expanded={isOpen}
+                      className={clsx(
+                        'shrink-0 flex items-center justify-center h-8 w-8 mr-1 rounded-md',
+                        location.pathname === to ? 'hover:bg-white/15' : 'hover:bg-ink-200/60 dark:hover:bg-ink-700'
+                      )}
+                    >
+                      <ChevronDown
+                        size={15}
+                        strokeWidth={2.4}
+                        className={clsx('transition-transform duration-150', isOpen && 'rotate-180')}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                {sections && sections.length > 0 && isOpen && (
+                  <ul className="mt-1 mb-1.5 ml-[26px] pl-3 border-l border-ink-100 dark:border-ink-800 space-y-0.5">
+                    {sections.map((sec) => (
+                      <li key={sec.id}>
+                        <button
+                          type="button"
+                          onClick={() => goToSection(to, sec.id)}
+                          className="w-full text-left px-2.5 py-1.5 rounded-md text-[12.5px] font-medium text-ink-500 dark:text-ink-400 hover:bg-brand-50 dark:hover:bg-ink-800 hover:text-brand-700 dark:hover:text-brand-400 truncate transition-colors"
+                        >
+                          {sec.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="px-4 py-4 border-t border-ink-100 dark:border-ink-800 space-y-4">

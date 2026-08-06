@@ -1,20 +1,26 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, Menu } from 'lucide-react';
 import clsx from 'clsx';
 import { NAV_ITEMS } from '../lib/navItems';
+import { useUIStore } from '../store/ui';
 
 /**
  * Small navigation aids shown on every page, so long dashboards don't force
  * the user to scroll all the way up/down manually:
  *  - Floating "back to top" / "go to bottom" buttons (all breakpoints) that
  *    fade in/out depending on scroll position.
+ *  - A floating "open menu" button (mobile only) that stays put no matter
+ *    how far down the page you've scrolled — the TopBar's own hamburger
+ *    button scrolls out of view with the rest of the header, so this is a
+ *    always-reachable shortcut to the sidebar without scrolling back up.
  *  - A mobile-only bottom tab bar for switching pages directly, since the
  *    full Sidebar is tucked behind a hamburger menu on small screens.
  */
 export default function BottomNav() {
   const [showTop, setShowTop] = useState(false);
   const [showBottom, setShowBottom] = useState(true);
+  const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
 
   useEffect(() => {
     function onScroll() {
@@ -65,6 +71,26 @@ export default function BottomNav() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Floating "buka menu" shortcut (mobile only) — stays fixed on screen
+          at all times (not tied to scroll position like the buttons below),
+          so the sidebar is always one tap away without scrolling back up to
+          reach the TopBar's hamburger button. */}
+      <button
+        type="button"
+        onClick={() => setMobileNavOpen(true)}
+        aria-label="Buka menu"
+        title="Buka menu"
+        className={clsx(
+          'no-print md:hidden fixed z-30 left-4 bottom-20',
+          'h-11 w-11 rounded-full bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200',
+          'border border-ink-200 dark:border-ink-700 shadow-card',
+          'flex items-center justify-center'
+        )}
+        style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <Menu size={20} strokeWidth={2.4} />
+      </button>
 
       {/* Floating "kembali ke atas" / "ke paling bawah" buttons */}
       <div className="no-print fixed z-30 right-4 md:right-6 bottom-20 md:bottom-6 flex flex-col gap-2">

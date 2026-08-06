@@ -301,7 +301,7 @@ export default function KinerjaDSR() {
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <div className="card p-5" ref={rankingChartRef}>
+          <div id="sec-peringkat-dsr" className="card p-5 scroll-mt-28" ref={rankingChartRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Peringkat Penjualan DSR</h3>
               <ExportMenu targetRef={rankingChartRef} filename="peringkat-penjualan-dsr" />
@@ -318,7 +318,7 @@ export default function KinerjaDSR() {
             </p>
           </div>
 
-          <div className="card p-5" ref={aoChartRef}>
+          <div id="sec-ao-dsr" className="card p-5 scroll-mt-28" ref={aoChartRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">{aoChartTitle}</h3>
               <ExportMenu targetRef={aoChartRef} filename="ao-dsr" />
@@ -344,7 +344,7 @@ export default function KinerjaDSR() {
           </div>
         </div>
 
-        <div className="card p-5" ref={dsrComparisonRef}>
+        <div id="sec-perbandingan-dsr" className="card p-5 scroll-mt-28" ref={dsrComparisonRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">Tabel Perbandingan Sales DSR</h3>
@@ -526,7 +526,7 @@ export default function KinerjaDSR() {
             </div>
           </div>
 
-          <div className="card p-5" ref={supplierBreakdownRef}>
+          <div id="sec-distribusi-supplier-dsr" className="card p-5 scroll-mt-28" ref={supplierBreakdownRef}>
             <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
               <div>
                 <h3 className="font-bold text-sm">Distribusi Produk / Supplier DSR</h3>
@@ -613,7 +613,7 @@ export default function KinerjaDSR() {
           </div>
         </div>
 
-        <div className="card p-5" ref={dsrBySupplierRef}>
+        <div id="sec-ranking-dsr-supplier" className="card p-5 scroll-mt-28" ref={dsrBySupplierRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">Ranking DSR per Supplier</h3>
@@ -698,7 +698,7 @@ export default function KinerjaDSR() {
         </div>
 
 
-        <div className="card p-5" ref={targetVsOmsetRef}>
+        <div id="sec-target-omset-supplier" className="card p-5 scroll-mt-28" ref={targetVsOmsetRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">Tabel Target vs Omset per Supplier</h3>

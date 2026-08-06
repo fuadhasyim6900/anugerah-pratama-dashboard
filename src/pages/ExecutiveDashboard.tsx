@@ -201,7 +201,7 @@ export default function ExecutiveDashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <div className="card p-5" ref={omsetPerKotaRef}>
+          <div id="sec-omset-per-kota" className="card p-5 scroll-mt-28" ref={omsetPerKotaRef}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Omset per Kota</h3>
               <ExportMenu targetRef={omsetPerKotaRef} filename="omset-per-kota" />
@@ -215,7 +215,7 @@ export default function ExecutiveDashboard() {
             />
           </div>
 
-          <div className="card p-5" ref={omsetPerDepoRef}>
+          <div id="sec-omset-per-depo" className="card p-5 scroll-mt-28" ref={omsetPerDepoRef}>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
               <h3 className="font-bold text-sm">Omset per Depo</h3>
               <div className="flex items-center gap-2">
@@ -252,7 +252,7 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
-        <div className="card p-5" ref={targetVsRealisasiRef}>
+        <div id="sec-target-vs-realisasi" className="card p-5 scroll-mt-28" ref={targetVsRealisasiRef}>
           <div className="flex items-start justify-between gap-3 mb-1">
             <h3 className="font-bold text-sm">Target vs Realisasi</h3>
             <ExportMenu targetRef={targetVsRealisasiRef} filename="target-vs-realisasi" />
@@ -275,7 +275,7 @@ export default function ExecutiveDashboard() {
           />
         </div>
 
-        <div className="card p-5" ref={aoSupplierRef}>
+        <div id="sec-ao-persupplier" className="card p-5 scroll-mt-28" ref={aoSupplierRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="font-bold text-sm">AO Persupplier</h3>
@@ -350,7 +350,7 @@ export default function ExecutiveDashboard() {
           </p>
         </div>
 
-        <div className="card p-5" ref={perbandinganBulananRef}>
+        <div id="sec-perbandingan-bulanan" className="card p-5 scroll-mt-28" ref={perbandinganBulananRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
             <div>
               <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
