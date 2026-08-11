@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import zlib from 'node:zlib';
 
 // Endpoint ini menggantikan pemanggilan Supabase LANGSUNG dari browser.
 //
@@ -67,6 +68,25 @@ export default async function handler(req, res) {
       supabase.from('data_meta').select('synced_at').eq('id', 1).maybeSingle(),
     ]);
 
+    const payload = JSON.stringify({
+      sales,
+      targets,
+      uangMasuk,
+      syncedAt: metaResult.data?.synced_at ?? null,
+    });
+
+    // Kompres manual sebelum dikirim. Alasan: response mentah (JSON belum
+    // dikompresi) ± 44 MB untuk ± 262.000 baris tabel `sales` -- ini
+    // kemungkinan besar melebihi batas ukuran maksimal yang boleh disimpan
+    // Vercel di CDN cache-nya, sehingga sebelumnya request SELALU muncul
+    // MISS walau Cache-Control sudah benar (responsnya berhasil dibuat,
+    // tapi ditolak untuk disimpan ke cache karena kebesaran).
+    // Setelah di-gzip di sini, ukurannya turun jadi ± 2,4 MB -- jauh di
+    // bawah batas, sehingga bisa benar-benar tersimpan di cache. Browser
+    // otomatis men-decompress ini sendiri (lewat header Content-Encoding),
+    // tidak perlu perubahan apa pun di kode frontend.
+    const compressed = zlib.gzipSync(payload);
+
     // s-maxage: berapa lama Vercel CDN boleh menyajikan hasil ini dari cache
     // tanpa menghubungi Supabase lagi.
     // stale-while-revalidate: kalau ada request PAS SAAT cache baru basi,
@@ -77,12 +97,9 @@ export default async function handler(req, res) {
       'Cache-Control',
       `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=3600`
     );
-    res.status(200).json({
-      sales,
-      targets,
-      uangMasuk,
-      syncedAt: metaResult.data?.synced_at ?? null,
-    });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Encoding', 'gzip');
+    res.status(200).send(compressed);
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Gagal memuat data' });
   }
