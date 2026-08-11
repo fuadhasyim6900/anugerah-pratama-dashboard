@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { SalesRow, TargetRow, UangMasukRow } from '../lib/types';
-import { loadSalesData, loadTargetData, loadUangMasukData, loadDataSyncedAt } from '../lib/loadData';
+import { loadSalesData, loadTargetData, loadUangMasukData, loadDataSyncedAt, resetDataCache } from '../lib/loadData';
 
 interface DataContextValue {
   sales: SalesRow[];
@@ -26,6 +26,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [dataUpdatedAt, setDataUpdatedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
+    resetDataCache();
     setLoading(true);
     setError(null);
     try {

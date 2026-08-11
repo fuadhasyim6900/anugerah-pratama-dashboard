@@ -1,55 +1,16 @@
-import { supabase, supabaseConfigError } from './supabaseClient';
 import type { SalesRow, TargetRow, UangMasukRow } from './types';
 import { normalizeBulanToMonthNum } from './types';
 
-// Data sekarang disimpan di Supabase (tabel `sales` dan `targets`), bukan lagi
-// di file Excel dalam repo. Untuk update data harian, edit langsung lewat
-// Supabase Table Editor / SQL Editor, atau lewat script import terpisah —
-// TIDAK perlu commit/push/redeploy lagi.
+// Data sekarang diambil lewat /api/data (Vercel Serverless Function), BUKAN
+// langsung dari Supabase di browser. Alasannya soal kuota: tabel `sales`
+// berisi ± 262.000 baris — kalau tiap browser sales menariknya langsung dari
+// Supabase setiap kali buka halaman, kuota egress Supabase Free (5 GB/bulan)
+// akan terlampaui hanya dengan traffic ringan sekalipun (lihat penjelasan di
+// chat). /api/data di-cache oleh Vercel selama beberapa jam (lihat
+// CACHE_SECONDS di api/data.js), jadi Supabase hanya diakses sesekali, bukan
+// tiap kunjungan.
 
-const PAGE_SIZE = 1000; // batas default PostgREST per request (naikkan lewat
-// Supabase Dashboard -> Settings -> API -> "Max Rows" kalau ingin lebih besar)
-
-// Sebelumnya versi ini mengambil data per halaman SECARA BERURUTAN (satu
-// request nunggu selesai baru request berikutnya jalan) — untuk tabel besar
-// seperti `sales` (~260rb baris = ~261 request) ini bikin loading awal lama.
-// Sekarang: hitung dulu total baris, lalu ambil SEMUA halaman SECARA
-// PARALEL sekaligus, jauh lebih cepat.
-async function fetchAllRows<T>(
-  table: string,
-  columns: string
-): Promise<T[]> {
-  // Baru dicek di sini (bukan saat modul di-import) supaya kalau env belum
-  // diset, errornya tertangkap oleh try/catch di useSalesData.tsx dan
-  // ditampilkan lewat <ErrorState />, bukan bikin app gagal mount total.
-  if (supabaseConfigError) throw new Error(supabaseConfigError);
-
-  // 1. Hitung total baris dulu (request ringan, tidak ambil data)
-  const { count, error: countError } = await supabase
-    .from(table)
-    .select('*', { count: 'exact', head: true });
-
-  if (countError) throw new Error(`Gagal menghitung jumlah baris "${table}": ${countError.message}`);
-  const total = count ?? 0;
-  if (total === 0) return [];
-
-  // 2. Susun semua request halaman, lalu jalankan bersamaan lewat Promise.all
-  const pageStarts: number[] = [];
-  for (let from = 0; from < total; from += PAGE_SIZE) pageStarts.push(from);
-
-  const pages = await Promise.all(
-    pageStarts.map(async (from) => {
-      const to = from + PAGE_SIZE - 1;
-      const { data, error } = await supabase.from(table).select(columns).range(from, to);
-      if (error) throw new Error(`Gagal memuat data dari tabel "${table}": ${error.message}`);
-      return (data ?? []) as unknown as T[];
-    })
-  );
-
-  return pages.flat();
-}
-
-interface SalesDbRow {
+interface ApiSalesRow {
   nominal: number;
   supp: string;
   depo: string;
@@ -61,7 +22,7 @@ interface SalesDbRow {
   tele: string;
 }
 
-interface TargetDbRow {
+interface ApiTargetRow {
   nama_salesman: string;
   depo: string;
   supplier: string;
@@ -69,13 +30,54 @@ interface TargetDbRow {
   monthly: number[];
 }
 
-export async function loadSalesData(): Promise<SalesRow[]> {
-  const rows = await fetchAllRows<SalesDbRow>(
-    'sales',
-    'nominal, supp, depo, bulan, tahun, kd_grup, sales, kota, tele'
-  );
+interface ApiUangMasukRow {
+  tahun: number;
+  bulan: string;
+  depo: string;
+  target_piutang: number;
+  realisasi_piutang: number;
+}
 
-  return rows
+interface ApiResponse {
+  sales: ApiSalesRow[];
+  targets: ApiTargetRow[];
+  uangMasuk: ApiUangMasukRow[];
+  syncedAt: string | null;
+  error?: string;
+}
+
+// Satu request ke /api/data dipakai bersama oleh semua fungsi load*() di
+// bawah (di-dedupe lewat Promise ini), jadi walau useSalesData.tsx
+// memanggil 4 fungsi sekaligus lewat Promise.all, browser cuma benar-benar
+// melakukan 1 kali fetch jaringan per pemuatan halaman.
+let inFlight: Promise<ApiResponse> | null = null;
+
+async function fetchApiData(): Promise<ApiResponse> {
+  if (!inFlight) {
+    inFlight = fetch('/api/data')
+      .then(async (res) => {
+        const json = (await res.json()) as ApiResponse;
+        if (!res.ok) throw new Error(json.error || `Gagal memuat data (status ${res.status})`);
+        return json;
+      })
+      .catch((err) => {
+        inFlight = null; // supaya klik "Refresh" berikutnya mencoba lagi, bukan terus gagal
+        throw err;
+      });
+  }
+  return inFlight;
+}
+
+/** Dipanggil oleh tombol Refresh supaya percobaan berikutnya fetch ulang
+ * (masih akan dilayani dari cache Vercel kalau belum basi -- ini TIDAK
+ * memaksa Supabase diakses ulang, cuma reset cache di level browser). */
+export function resetDataCache() {
+  inFlight = null;
+}
+
+export async function loadSalesData(): Promise<SalesRow[]> {
+  const { sales } = await fetchApiData();
+  return sales
     .map((r): SalesRow => {
       const bulanRaw = String(r.bulan ?? '').trim();
       return {
@@ -94,36 +96,14 @@ export async function loadSalesData(): Promise<SalesRow[]> {
     .filter((r) => r.depo && r.sales);
 }
 
-// Waktu terakhir data di-sync ke Supabase (diisi oleh scripts/sync-data.mjs
-// setiap kali Anda menjalankan sinkronisasi Excel -> database). Ini BEDA
-// dengan waktu browser memuat data (yang berubah setiap refresh halaman) —
-// ini adalah waktu Anda benar-benar meng-update datanya.
 export async function loadDataSyncedAt(): Promise<Date | null> {
-  const { data, error } = await supabase
-    .from('data_meta')
-    .select('synced_at')
-    .eq('id', 1)
-    .maybeSingle();
-
-  if (error || !data?.synced_at) return null;
-  return new Date(data.synced_at);
-}
-
-interface UangMasukDbRow {
-  tahun: number;
-  bulan: string;
-  depo: string;
-  target_piutang: number;
-  realisasi_piutang: number;
+  const { syncedAt } = await fetchApiData();
+  return syncedAt ? new Date(syncedAt) : null;
 }
 
 export async function loadUangMasukData(): Promise<UangMasukRow[]> {
-  const rows = await fetchAllRows<UangMasukDbRow>(
-    'uang_masuk',
-    'tahun, bulan, depo, target_piutang, realisasi_piutang'
-  );
-
-  return rows
+  const { uangMasuk } = await fetchApiData();
+  return uangMasuk
     .map((r): UangMasukRow => {
       const bulanRaw = String(r.bulan ?? '').trim();
       return {
@@ -139,20 +119,17 @@ export async function loadUangMasukData(): Promise<UangMasukRow[]> {
 }
 
 export async function loadTargetData(): Promise<TargetRow[]> {
-  const rows = await fetchAllRows<TargetDbRow>(
-    'targets',
-    'nama_salesman, depo, supplier, tahun, monthly'
-  );
-
-  return rows
+  const { targets } = await fetchApiData();
+  return targets
     .map((r): TargetRow => ({
       namaSalesman: String(r.nama_salesman ?? '').trim(),
       depo: String(r.depo ?? '').trim().toUpperCase(),
       supplier: String(r.supplier ?? '').trim().toUpperCase(),
       tahun: r.tahun ?? new Date().getFullYear(),
-      monthly: Array.isArray(r.monthly) && r.monthly.length === 12
-        ? r.monthly.map((v) => Number(v) || 0)
-        : new Array(12).fill(0),
+      monthly:
+        Array.isArray(r.monthly) && r.monthly.length === 12
+          ? r.monthly.map((v) => Number(v) || 0)
+          : new Array(12).fill(0),
     }))
     .filter((r) => r.namaSalesman);
 }

@@ -109,9 +109,20 @@ npm run preview   # untuk mengetes hasil build secara lokal
 3. Framework preset: **Vite** (Vercel akan mendeteksinya otomatis).
    - Build Command: `npm run build`
    - Output Directory: `dist`
-4. Deploy. Setelah itu, setiap `git push` ke branch utama akan otomatis membuat deployment baru.
+4. Di **Settings → Environment Variables**, tambahkan dua variable ini (nilainya sama dengan yang ada di `.env` lokal Anda):
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+5. Deploy. Setelah itu, setiap `git push` ke branch utama akan otomatis membuat deployment baru.
 
-Tidak perlu environment variable apa pun — data diambil langsung dari file di `public/data` pada repo yang sama.
+## Cara data diambil (dan kenapa lewat /api/data, bukan langsung dari browser)
+
+Data disimpan di Supabase (tabel `sales`, `targets`, `uang_masuk`), diisi lewat `node scripts/sync-data.mjs`. Tabel `sales` sendiri berisi ± 262.000 baris.
+
+Browser **tidak** memanggil Supabase secara langsung. Sebagai gantinya, browser memanggil `/api/data` — sebuah Vercel Serverless Function (`api/data.js`) yang mengambil data dari Supabase di sisi server, lalu Vercel meng-cache hasilnya (default 4 jam, atur lewat `CACHE_SECONDS` di `api/data.js`).
+
+Alasannya: kalau 262.000 baris itu ditarik ulang dari Supabase oleh **setiap** browser sales di **setiap** kunjungan, kuota egress Supabase Free (5 GB/bulan) akan habis hanya dengan traffic ringan. Dengan cache di `/api/data`, berapa pun banyaknya sales yang membuka dashboard dalam jendela cache tsb, Supabase hanya diakses satu kali — sisanya dilayani dari cache Vercel.
+
+**Konsekuensinya:** data di dashboard bisa telat sampai dengan durasi cache (default 4 jam) dibanding waktu Anda menjalankan `sync-data.mjs`. Kalau Anda sync di jam-jam tetap (misal 3x sehari), sesuaikan `CACHE_SECONDS` di `api/data.js` supaya jendelanya pas dengan jarak antar sync Anda.
 
 ## Struktur proyek
 

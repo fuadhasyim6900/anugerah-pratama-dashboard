@@ -1,0 +1,5 @@
+update data 
+1. refresh power query
+
+2. copy code ini diterminal
+node --env-file=.env scripts/sync-data.mjs
