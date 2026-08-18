@@ -5,10 +5,17 @@ import { normalizeBulanToMonthNum } from './types';
 // langsung dari Supabase di browser. Alasannya soal kuota: tabel `sales`
 // berisi ± 262.000 baris — kalau tiap browser sales menariknya langsung dari
 // Supabase setiap kali buka halaman, kuota egress Supabase Free (5 GB/bulan)
-// akan terlampaui hanya dengan traffic ringan sekalipun (lihat penjelasan di
-// chat). /api/data di-cache oleh Vercel selama beberapa jam (lihat
-// CACHE_SECONDS di api/data.js), jadi Supabase hanya diakses sesekali, bukan
-// tiap kunjungan.
+// akan terlampaui hanya dengan traffic ringan sekalipun.
+//
+// CACHE "PER VERSI": sebelum mengambil data besar, kita tanya dulu ke
+// /api/meta (endpoint kecil, cache CDN cuma 60 detik) berapa `syncedAt`
+// (versi data) saat ini. Lalu /api/data dipanggil dengan `?v=<syncedAt>` —
+// URL itu di-cache Vercel SANGAT lama karena isinya memang tidak berubah
+// untuk versi yang sama. Begitu Anda jalankan `node scripts/sync-data.mjs`,
+// `syncedAt` berubah, dan dalam ≤60 detik SEMUA browser otomatis mendeteksi
+// versi baru lalu mengambil data segar — tanpa perlu klik Refresh, dan
+// tanpa Supabase dipukul oleh tiap kunjungan sales (lihat api/data.js &
+// api/meta.js untuk detailnya).
 
 interface ApiSalesRow {
   nominal: number;
@@ -46,31 +53,45 @@ interface ApiResponse {
   error?: string;
 }
 
-// Satu request ke /api/data dipakai bersama oleh semua fungsi load*() di
-// bawah (di-dedupe lewat Promise ini), jadi walau useSalesData.tsx
+// Satu "sesi" fetch (meta + data) dipakai bersama oleh semua fungsi load*()
+// di bawah (di-dedupe lewat Promise ini), jadi walau useSalesData.tsx
 // memanggil 4 fungsi sekaligus lewat Promise.all, browser cuma benar-benar
-// melakukan 1 kali fetch jaringan per pemuatan halaman.
+// melakukan fetch jaringan sekali per pemuatan halaman.
 let inFlight: Promise<ApiResponse> | null = null;
 
 async function fetchApiData(): Promise<ApiResponse> {
   if (!inFlight) {
-    inFlight = fetch('/api/data')
-      .then(async (res) => {
-        const json = (await res.json()) as ApiResponse;
-        if (!res.ok) throw new Error(json.error || `Gagal memuat data (status ${res.status})`);
-        return json;
-      })
-      .catch((err) => {
-        inFlight = null; // supaya klik "Refresh" berikutnya mencoba lagi, bukan terus gagal
-        throw err;
-      });
+    inFlight = (async () => {
+      // 1) Tanya versi data terbaru dulu (murah, cache 60 detik). Kalau
+      // gagal (mis. tabel data_meta belum dibuat), tetap lanjut pakai
+      // versi fallback 'v0' supaya dashboard tidak macet.
+      let version = 'v0';
+      try {
+        const metaRes = await fetch('/api/meta');
+        const meta = (await metaRes.json()) as { syncedAt: string | null };
+        version = meta.syncedAt ?? 'v0';
+      } catch {
+        // biarkan version = 'v0'
+      }
+
+      // 2) Ambil data besar untuk versi tsb -- URL unik per versi, jadi
+      // otomatis fresh begitu ada sync baru, tanpa perlu purge cache manual.
+      const res = await fetch(`/api/data?v=${encodeURIComponent(version)}`);
+      const json = (await res.json()) as ApiResponse;
+      if (!res.ok) throw new Error(json.error || `Gagal memuat data (status ${res.status})`);
+      return json;
+    })().catch((err) => {
+      inFlight = null; // supaya klik "Refresh" berikutnya mencoba lagi, bukan terus gagal
+      throw err;
+    });
   }
   return inFlight;
 }
 
-/** Dipanggil oleh tombol Refresh supaya percobaan berikutnya fetch ulang
- * (masih akan dilayani dari cache Vercel kalau belum basi -- ini TIDAK
- * memaksa Supabase diakses ulang, cuma reset cache di level browser). */
+/** Dipanggil oleh tombol Refresh supaya percobaan berikutnya menjalankan
+ * ulang alur meta -> data dari awal. Karena /api/meta cache-nya cuma 60
+ * detik, dalam praktiknya Refresh akan selalu (atau hampir selalu)
+ * mendapat versi data terkini -- tidak perlu menunggu jam-jaman lagi. */
 export function resetDataCache() {
   inFlight = null;
 }

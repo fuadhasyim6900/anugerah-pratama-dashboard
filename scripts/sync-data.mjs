@@ -23,12 +23,12 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 
 if (!SUPABASE_URL || !SECRET_KEY) {
   console.error(
-    'ERROR: pastikan VITE_SUPABASE_URL dan SUPABASE_SECRET_KEY ada di file .env\n' +
+    'ERROR: pastikan SUPABASE_URL dan SUPABASE_SECRET_KEY ada di file .env\n' +
       '(SUPABASE_SECRET_KEY diambil dari Supabase -> Settings -> API Keys -> Secret keys)'
   );
   process.exit(1);

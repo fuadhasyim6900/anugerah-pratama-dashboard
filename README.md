@@ -13,21 +13,26 @@ Sidebar berisi filter **Depo**, **Bulan**, dan **Tahun** yang berlaku ke semua h
 
 ## Sumber data
 
-Data **tidak** di-hardcode — dashboard membaca langsung 2 file Excel ini saat halaman dibuka:
+Data **tidak** di-hardcode dan **tidak** dibaca langsung dari file Excel oleh dashboard saat halaman dibuka. Alurnya:
 
 ```
 public/data/DATA.xlsx               → transaksi penjualan (NOMINAL, SUPP, DEPO, BULAN, TAHUN, KD GRUP, SALES, KOTA, TELE)
 public/data/DATA_TARGET_FUAD.xlsx   → target bulanan per salesman/supplier
+public/data/REALISASI UANG MASUK.xlsx → target & realisasi penagihan piutang
 ```
 
-> Catatan teknis: kedua file sumber ternyata menyimpan nama kolom dengan tanda kutip & spasi tambahan (mis. `" DEPO "` bukan `DEPO`) — kemungkinan sisa dari proses export CSV→Excel. Parser sudah menormalkan ini secara otomatis, jadi tidak masalah walau formatnya seperti itu tetap terbaca dengan benar (ini juga penyebab kartu Target sebelumnya tidak terbaca — sudah diperbaiki).
+File-file Excel di atas hanyalah **sumber lokal** yang dibaca oleh `scripts/sync-data.mjs` (jalan di komputer Anda, bukan di browser) lalu disinkronkan ke Supabase. Dashboard sendiri mengambil datanya dari Supabase lewat `/api/data` & `/api/meta` (lihat bagian "Cara data diambil" di bawah) — **bukan** dari file Excel di repo secara langsung.
+
+> Catatan teknis: kedua file sumber ternyata menyimpan nama kolom dengan tanda kutip & spasi tambahan (mis. `" DEPO "` bukan `DEPO`) — kemungkinan sisa dari proses export CSV→Excel. Parser di `sync-data.mjs` sudah menormalkan ini secara otomatis.
 
 ### Cara update data setiap hari
 
-1. Buka repository GitHub Anda.
-2. Timpa (replace) kedua file di atas dengan versi terbaru — **nama file harus tetap sama persis**.
-3. Commit & push ke branch yang terhubung ke Vercel.
-4. Vercel otomatis build & deploy ulang (biasanya 1–2 menit). Setelah deploy selesai, buka dashboard dan klik tombol **Refresh** di kanan atas untuk memastikan data terbaru terambil (dashboard juga selalu fetch file dengan cache-busting, jadi tidak akan menampilkan data lama yang ter-cache browser).
+1. Timpa (replace) file Excel yang relevan di `public/data/` di komputer Anda dengan versi terbaru — **nama file harus tetap sama persis**.
+2. Jalankan:
+   ```bash
+   node --env-file=.env scripts/sync-data.mjs
+   ```
+3. Selesai — data langsung masuk ke Supabase, dan **dashboard otomatis mengikuti dalam ≤60 detik** (lihat bagian "Cara data diambil" di bawah untuk penjelasan mekanismenya). Tidak perlu commit/push file Excel ke GitHub, dan tidak perlu klik Refresh secara manual (meski tombol Refresh tetap ada kalau Anda ingin memastikan).
 
 > Catatan: kolom `TAHUN` pada file omset saat ini belum ada (data yang diupload baru berisi 2026). Begitu Anda menambahkan kolom `TAHUN` beserta data 2025, filter Tahun dan perbandingan YoY di halaman Proyeksi S2 akan otomatis terisi tanpa perlu ubah kode apa pun — kalau kolom `TAHUN` kosong, baris otomatis dianggap tahun 2026.
 
@@ -114,15 +119,20 @@ npm run preview   # untuk mengetes hasil build secara lokal
    - `SUPABASE_ANON_KEY`
 5. Deploy. Setelah itu, setiap `git push` ke branch utama akan otomatis membuat deployment baru.
 
-## Cara data diambil (dan kenapa lewat /api/data, bukan langsung dari browser)
+## Cara data diambil (dan kenapa lewat /api/data + /api/meta, bukan langsung dari browser)
 
 Data disimpan di Supabase (tabel `sales`, `targets`, `uang_masuk`), diisi lewat `node scripts/sync-data.mjs`. Tabel `sales` sendiri berisi ± 262.000 baris.
 
-Browser **tidak** memanggil Supabase secara langsung. Sebagai gantinya, browser memanggil `/api/data` — sebuah Vercel Serverless Function (`api/data.js`) yang mengambil data dari Supabase di sisi server, lalu Vercel meng-cache hasilnya (default 4 jam, atur lewat `CACHE_SECONDS` di `api/data.js`).
+Browser **tidak** memanggil Supabase secara langsung. Alurnya dua tahap:
 
-Alasannya: kalau 262.000 baris itu ditarik ulang dari Supabase oleh **setiap** browser sales di **setiap** kunjungan, kuota egress Supabase Free (5 GB/bulan) akan habis hanya dengan traffic ringan. Dengan cache di `/api/data`, berapa pun banyaknya sales yang membuka dashboard dalam jendela cache tsb, Supabase hanya diakses satu kali — sisanya dilayani dari cache Vercel.
+1. Browser memanggil `/api/meta` (`api/meta.js`) — endpoint kecil & murah yang cuma mengembalikan `syncedAt` (waktu sync terakhir). Di-cache Vercel **60 detik saja**.
+2. Browser lalu memanggil `/api/data?v=<syncedAt>` (`api/data.js`) — endpoint yang mengambil seluruh data dari Supabase. Karena URL-nya menyertakan versi (`v`), Vercel meng-cache-nya **sangat lama per versi** (data untuk versi yang sama memang tidak pernah berubah).
 
-**Konsekuensinya:** data di dashboard bisa telat sampai dengan durasi cache (default 4 jam) dibanding waktu Anda menjalankan `sync-data.mjs`. Kalau Anda sync di jam-jam tetap (misal 3x sehari), sesuaikan `CACHE_SECONDS` di `api/data.js` supaya jendelanya pas dengan jarak antar sync Anda.
+**Kenapa dua tahap, bukan satu cache biasa:** dengan cara ini, begitu Anda menjalankan `sync-data.mjs`, `syncedAt` di Supabase berubah → dalam waktu **maksimal 60 detik**, semua browser sales otomatis mendeteksi versi baru lewat `/api/meta` → mereka memanggil `/api/data?v=<versi-baru>`, yang otomatis dianggap cache MISS oleh Vercel (karena URL-nya beda) sehingga Supabase diakses ulang **sekali** untuk versi itu, lalu hasilnya dilayani dari cache untuk semua sales lain yang membuka dashboard di versi yang sama.
+
+Hasilnya: **dashboard otomatis ter-update dalam hitungan detik/menit setelah sync**, sales tidak perlu klik Refresh, DAN Supabase tetap hanya diakses satu kali per sync (bukan sekali per kunjungan per sales) — jadi kuota egress Supabase Free (5 GB/bulan) tetap aman meski trafik ramai.
+
+> Catatan: mekanisme ini mensyaratkan tabel `data_meta` sudah dibuat (lihat bagian "Menampilkan waktu terakhir update data" di atas) dan terisi lewat `sync-data.mjs`. Kalau tabel itu belum ada, `/api/meta` akan mengembalikan versi kosong dan `/api/data` otomatis jatuh ke cache fallback pendek (5 menit) — dashboard tetap jalan normal, hanya saja deteksi sync-nya tidak seinstan itu.
 
 ## Struktur proyek
 

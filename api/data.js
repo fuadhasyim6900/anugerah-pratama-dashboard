@@ -9,16 +9,35 @@ import zlib from 'node:zlib';
 // (tidak ada server Next.js seperti di app Update Stok AP).
 //
 // Sekarang: browser memanggil /api/data (endpoint ini). Endpoint ini yang
-// menghubungi Supabase, DAN Vercel meng-cache hasilnya di CDN selama
-// CACHE_SECONDS di bawah. Selama jendela cache itu, Supabase hanya diakses
-// SEKALI walau ada ratusan kunjungan dari puluhan sales berbeda.
+// menghubungi Supabase, DAN Vercel meng-cache hasilnya di CDN.
+//
+// CACHE "PER VERSI" (supaya sync langsung otomatis kelihatan, bukan nunggu
+// jam cache habis): frontend (lihat src/lib/loadData.ts) selalu memanggil
+// endpoint ini dengan query `?v=<synced_at>`, yang nilainya diambil lebih
+// dulu dari /api/meta (endpoint kecil & murah, cache-nya cuma 60 detik).
+// Karena URL `/api/data?v=...` beda tiap kali Anda sync, Vercel otomatis
+// menganggapnya request BARU (cache MISS) begitu ada sync baru -- tidak
+// perlu "purge cache" manual. Untuk versi (v) yang SAMA, boleh di-cache
+// SANGAT lama karena isinya memang tidak akan berubah untuk versi itu.
+//
+// Jadi alurnya: sync selesai -> data_meta.synced_at berubah -> dalam waktu
+// maksimal 60 detik (umur cache /api/meta) semua browser mendeteksi versi
+// baru -> /api/data?v=<versi-baru> otomatis diambil ulang dari Supabase
+// SEKALI (untuk versi itu), lalu dilayani dari cache untuk semua sales
+// lain. Supabase tetap hanya diakses sekali per sync, bukan per kunjungan.
 
 const PAGE_SIZE = 1000;
 
-// Cache 4 jam. Sesuaikan kalau jadwal update data harian Anda beda -
-// misal kalau cuma sync 1x/hari, angka ini bisa dinaikkan (mis. 21600 = 6 jam
-// atau 43200 = 12 jam) supaya makin jarang Supabase diakses.
-const CACHE_SECONDS = 14400;
+// Versi diketahui (v ada di query, dikirim frontend) -> aman di-cache lama,
+// karena kontennya memang unik & tidak berubah per versi. 1 tahun (dalam
+// praktiknya tidak akan sampai kepakai selama itu, versi baru akan selalu
+// muncul begitu ada sync berikutnya).
+const CACHE_SECONDS_VERSIONED = 31536000;
+
+// Fallback kalau entah kenapa request datang TANPA parameter versi (mis.
+// dipanggil manual, atau /api/meta gagal di frontend). Cache pendek saja
+// supaya tidak nyangkut lama-lama di data basi.
+const CACHE_SECONDS_FALLBACK = 300;
 
 async function fetchAllRows(supabase, table, columns) {
   const { count, error: countError } = await supabase
@@ -87,15 +106,15 @@ export default async function handler(req, res) {
     // tidak perlu perubahan apa pun di kode frontend.
     const compressed = zlib.gzipSync(payload);
 
-    // s-maxage: berapa lama Vercel CDN boleh menyajikan hasil ini dari cache
-    // tanpa menghubungi Supabase lagi.
-    // stale-while-revalidate: kalau ada request PAS SAAT cache baru basi,
-    // tetap sajikan versi lama itu ke sales tsb (biar tidak menunggu),
-    // sambil Vercel mengambil data segar di belakang layar untuk request
-    // berikutnya.
+    // Ada parameter versi (?v=...) di URL -> aman di-cache sangat lama,
+    // karena versi baru = URL baru = otomatis cache MISS begitu ada sync.
+    // Tidak ada versi -> fallback pendek (lihat komentar CACHE_SECONDS_FALLBACK).
+    const hasVersion = typeof req.query.v === 'string' && req.query.v.length > 0;
+    const cacheSeconds = hasVersion ? CACHE_SECONDS_VERSIONED : CACHE_SECONDS_FALLBACK;
+
     res.setHeader(
       'Cache-Control',
-      `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=3600`
+      `public, s-maxage=${cacheSeconds}, stale-while-revalidate=3600`
     );
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Encoding', 'gzip');
