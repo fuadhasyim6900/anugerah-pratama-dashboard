@@ -90,8 +90,21 @@ async function insertBatched(table, rows) {
 
 // TGL FAKTUR bisa berupa objek Date (kalau cellDates:true berhasil
 // mendeteksi format tanggal sel), serial Excel, atau string "dd/mm/yyyy".
+//
+// PENTING soal timezone: saat SheetJS membaca sel bertipe Date dengan
+// cellDates:true, objek Date yang dihasilkan sudah punya tanggal yang benar
+// secara LOKAL (mis. tengah malam WIB tanggal 20). Kalau kita ambil
+// tanggalnya lewat v.toISOString() (yang membaca dalam UTC), di komputer
+// dengan timezone WIB (UTC+7) itu jadi jam 17:00 tanggal 19 UTC -> tanggal
+// mundur 1 hari. Makanya di sini kita HARUS pakai getFullYear/getMonth/
+// getDate (versi lokal), bukan toISOString(), supaya tanggal tidak geser.
 function toIsoDate(v) {
-  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const yyyy = v.getFullYear();
+    const mm = String(v.getMonth() + 1).padStart(2, '0');
+    const dd = String(v.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
   if (typeof v === 'number') {
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
