@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { useUIStore } from '../store/ui';
 import { NAV_ITEMS } from '../lib/navItems';
 import clsx from 'clsx';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 export default function Sidebar() {
-  const { sidebarCollapsed, mobileNavOpen, setMobileNavOpen } = useUIStore();
+  const { sidebarCollapsed, mobileNavOpen, setMobileNavOpen, toggleSidebarCollapsed } = useUIStore();
   const setScrollTargetId = useUIStore((s) => s.setScrollTargetId);
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,6 +42,22 @@ export default function Sidebar() {
         />
       )}
 
+      {/* Desktop-only "tampilkan sidebar" button, shown once the sidebar is
+          collapsed. Fixed to the viewport (not tied to page scroll) so it's
+          always in the same, reachable spot regardless of how tall a given
+          page's header/subtitle happens to be — unlike a toggle placed
+          inside the page's own sticky TopBar. */}
+      {sidebarCollapsed && (
+        <button
+          onClick={toggleSidebarCollapsed}
+          title="Tampilkan sidebar"
+          aria-label="Tampilkan sidebar"
+          className="no-print hidden md:flex fixed top-4 left-4 z-40 items-center justify-center h-9 w-9 rounded-lg border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink-600 dark:text-ink-300 shadow-card hover:bg-ink-50 dark:hover:bg-ink-800"
+        >
+          <PanelLeftOpen size={16} />
+        </button>
+      )}
+
       <aside
         className={clsx(
           'no-print w-72 shrink-0 flex flex-col bg-white dark:bg-ink-900 border-r border-ink-100 dark:border-ink-800',
@@ -65,6 +81,19 @@ export default function Sidebar() {
             aria-label="Tutup menu"
           >
             <X size={18} />
+          </button>
+          {/* Desktop-only "sembunyikan sidebar" toggle, kept inside this
+              inner header (which has its own reliable sticky container —
+              this <aside> scrolls itself via overflow-y-auto) instead of
+              inside the page's TopBar, whose sticky behaviour isn't
+              consistent across pages with different subtitle heights. */}
+          <button
+            onClick={toggleSidebarCollapsed}
+            title="Sembunyikan sidebar"
+            className="ml-auto hidden md:flex items-center justify-center h-8 w-8 rounded-lg text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800 shrink-0"
+            aria-label="Sembunyikan sidebar"
+          >
+            <PanelLeftClose size={18} />
           </button>
         </div>
 

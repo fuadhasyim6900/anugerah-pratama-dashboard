@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, Wallet, Store, PackageSearch, LineChart, ListOrdered, History } from 'lucide-react';
+import { CalendarClock, Wallet, Store, PackageSearch, LineChart, ListOrdered, History, ArrowLeftRight } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
+import DualAxisComboChart from '../components/charts/DualAxisComboChart';
 import MultiSelect from '../components/MultiSelect';
 import ExportMenu from '../components/ExportMenu';
 import Tabs, { TabPanel } from '../components/Tabs';
@@ -10,13 +11,13 @@ import DetailModal from '../components/DetailModal';
 import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
-  applyFilters, sumNominal, distinctCount, formatRupiah, formatNumber,
-  depoLabel, bulanLabel, tahunLabel, DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST,
+  applyFilters, sumNominal, distinctCount, formatRupiah, formatNumber, formatCompactRupiah,
+  depoLabel, bulanLabel, tahunLabel, DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST, distinctDSR,
 } from '../lib/aggregate';
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
   filterByTanggal, distinctTanggalPresent, dailyTrend, itemsBySupplierQty,
-  customerPurchaseHistory, formatTanggalPendek,
+  customerPurchaseHistory, formatTanggalPendek, dailyComparisonForMonth,
 } from '../lib/omsetHarian';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 
@@ -26,6 +27,7 @@ const HISTORY_ROWS_LIMIT = 200;
 const HARIAN_TABS = [
   { id: 'grafik', label: 'Grafik Harian', icon: <LineChart size={14} />, sectionIds: ['sec-omset-harian'] },
   { id: 'barang', label: 'Barang Terlaris', icon: <ListOrdered size={14} />, sectionIds: ['sec-barang-terlaris'] },
+  { id: 'perbandingan', label: 'Perbandingan Harian', icon: <ArrowLeftRight size={14} />, sectionIds: ['sec-rincian-perbandingan-harian'] },
   { id: 'riwayat', label: 'Riwayat Pengambilan', icon: <History size={14} />, sectionIds: ['sec-riwayat-pengambilan'] },
 ];
 
@@ -58,16 +60,78 @@ export default function OmsetHarian() {
   const itemTotalQty = useMemo(() => itemRows.reduce((a, r) => a + r.qty, 0), [itemRows]);
   const itemTotalNominal = useMemo(() => itemRows.reduce((a, r) => a + r.nominal, 0), [itemRows]);
 
-  // --- Riwayat pengambilan barang: filter lokal tambahan (No Faktur & KD
-  // Pelanggan menyaring baris faktur SEBELUM diringkas per Pelanggan+Barang,
-  // sedangkan Nama Pelanggan cari teks bebas setelah diringkas; Depo/SUPP/
-  // Bulan/Tahun langsung memakai filter global di sidebar (setDepo/setSupp/
-  // setBulan/setTahun) dan disediakan juga sebagai kontrol lokal di section
-  // ini biar tidak perlu pindah ke tombol Filter di atas, sementara Tanggal
-  // memakai state `tanggal` yang sama dengan tab Grafik Harian).
+  // Daftar pilihan Depo/Sales DSR/Supplier/Tahun (dari seluruh data, tidak
+  // ikut tersaring filter aktif) — dipakai sebagai kontrol filter lokal di
+  // tiap section halaman ini (Grafik Harian, Barang Terlaris, Perbandingan
+  // Harian, Riwayat Pengambilan), semuanya langsung memakai filter global di
+  // sidebar (filters.setDepo/setDsr/setSupp/setBulan/setTahun) supaya tetap
+  // sinkron dengan tombol Filter di atas & halaman lain.
   const depoOptions = useMemo(() => DEPO_LIST_EXCLUDING_ADMIN(sales), [sales]);
   const suppOptions = useMemo(() => SUPP_LIST(sales), [sales]);
+  const dsrOptions = useMemo(() => distinctDSR(sales), [sales]);
   const tahunOptions = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+
+  // --- Tabel Rincian Perbandingan Harian ---------------------------------
+  // Perbandingan penjualan & AO per tanggal antara Bulan A dan Bulan B (bisa
+  // bulan & tahun berbeda), dengan filter SUPP & Nama DSR sendiri di atas
+  // filter Depo global, plus grafik combo (sama seperti "Tabel Perbandingan
+  // Sales DSR" di halaman Kinerja DSR).
+  const [harianTahunA, setHarianTahunA] = useState<number | null>(null);
+  const [harianTahunB, setHarianTahunB] = useState<number | null>(null);
+  const [harianBulanA, setHarianBulanA] = useState<number>(1);
+  const [harianBulanB, setHarianBulanB] = useState<number>(1);
+  useEffect(() => {
+    if (tahunOptions.length >= 2 && (harianTahunA === null || harianTahunB === null)) {
+      setHarianTahunA(tahunOptions[tahunOptions.length - 2]);
+      setHarianTahunB(tahunOptions[tahunOptions.length - 1]);
+    } else if (tahunOptions.length === 1 && harianTahunB === null) {
+      setHarianTahunA(tahunOptions[0]);
+      setHarianTahunB(tahunOptions[0]);
+    }
+  }, [tahunOptions, harianTahunA, harianTahunB]);
+  const harianBulanInit = useRef(false);
+  useEffect(() => {
+    if (!harianBulanInit.current && sales.length) {
+      harianBulanInit.current = true;
+      const months = Array.from(new Set(sales.map((r) => r.monthNum))).filter((m) => m >= 1 && m <= 12);
+      if (months.length) {
+        setHarianBulanA(Math.max(...months));
+        setHarianBulanB(Math.max(...months));
+      }
+    }
+  }, [sales]);
+
+  const [harianSuppFilter, setHarianSuppFilter] = useState<string[]>([]);
+  useEffect(() => {
+    setHarianSuppFilter((prev) => prev.filter((s) => suppOptions.includes(s)));
+  }, [suppOptions]);
+  const [harianDsrFilter, setHarianDsrFilter] = useState<string[]>([]);
+  useEffect(() => {
+    setHarianDsrFilter((prev) => prev.filter((d) => dsrOptions.includes(d)));
+  }, [dsrOptions]);
+
+  const harianScope = useMemo(
+    () => applyFilters(sales, { depo: filters.depo, dsr: harianDsrFilter, supp: harianSuppFilter, bulan: [], tahun: [] }),
+    [sales, filters.depo, harianDsrFilter, harianSuppFilter]
+  );
+  const dailyComparisonDSR = useMemo(
+    () => dailyComparisonForMonth(harianScope, harianBulanA, harianTahunA, harianBulanB, harianTahunB),
+    [harianScope, harianBulanA, harianTahunA, harianBulanB, harianTahunB]
+  );
+  const harianTahunALabel = harianTahunA ?? '-';
+  const harianTahunBLabel = harianTahunB ?? '-';
+  // Shared coloring convention with other Penjualan/AO comparison charts on
+  // this dashboard, so the same metric always reads the same color.
+  const CMP_COLORS = { salesA: '#2563eb', salesB: '#eab308', aoA: '#0891b2', aoB: '#a16207' };
+
+  // --- Riwayat pengambilan barang: filter lokal tambahan (No Faktur & KD
+  // Pelanggan menyaring baris faktur SEBELUM diringkas per Pelanggan+Barang,
+  // sedangkan Nama Pelanggan cari teks bebas setelah diringkas; Depo/Sales/
+  // SUPP/Bulan/Tahun langsung memakai filter global di sidebar (setDepo/
+  // setDsr/setSupp/setBulan/setTahun) dan disediakan juga sebagai kontrol
+  // lokal di section ini biar tidak perlu pindah ke tombol Filter di atas,
+  // sementara Tanggal memakai state `tanggal` yang sama dengan tab Grafik
+  // Harian).
   const [historySearchNoFaktur, setHistorySearchNoFaktur] = useState('');
   const [historySearchKdPelanggan, setHistorySearchKdPelanggan] = useState('');
   const [historySearchNamaPelanggan, setHistorySearchNamaPelanggan] = useState('');
@@ -90,6 +154,7 @@ export default function OmsetHarian() {
 
   const trendRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<HTMLDivElement>(null);
+  const harianComparisonRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
 
   // --- Drill-down modals ---------------------------------------------
@@ -151,6 +216,51 @@ export default function OmsetHarian() {
                   allLabel="Semua Tanggal"
                 />
               </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Sales"
+                  options={dsrOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.dsr}
+                  onChange={filters.setDsr}
+                  allLabel="Semua Sales"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Depo"
+                  options={depoOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.depo}
+                  onChange={filters.setDepo}
+                  allLabel="Semua Depo"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Supp"
+                  options={suppOptions.map((s) => ({ value: s, label: s }))}
+                  selected={filters.supp}
+                  onChange={filters.setSupp}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-28">
+                <MultiSelect
+                  label="Tahun"
+                  options={tahunOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
               <ExportMenu targetRef={trendRef} filename="grafik-omset-harian" />
             </div>
           </div>
@@ -166,21 +276,68 @@ export default function OmsetHarian() {
             />
           </div>
           <p className="text-[11px] text-ink-400 mt-2">
-            Gunakan filter <strong>SUPP</strong>, <strong>Depo</strong>, dan <strong>Sales DSR</strong> di tombol Filter (atas) untuk mempersempit grafik ini — filter Tanggal di atas hanya tersedia di halaman ini. Klik salah satu bar untuk melihat barang terlaris di tanggal tersebut.
+            Filter Tanggal/Sales/Depo/Supp/Bulan/Tahun di atas berlaku untuk seluruh halaman Omset Harian (sama seperti tombol Filter di atas). Klik salah satu bar untuk melihat barang terlaris di tanggal tersebut.
           </p>
         </div>
         </TabPanel>
 
         <TabPanel id="barang">
         <div id="sec-barang-terlaris" className="card p-5 scroll-mt-28" ref={itemsRef}>
-          <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
             <div>
               <h3 className="font-bold text-sm">Barang Paling Banyak Diambil</h3>
               <p className="text-xs text-ink-400">
-                Top {TOP_ITEMS_LIMIT} barang berdasarkan akumulasi Nominal per Supplier, dengan filter yang sama seperti grafik omset harian di atas
+                Top {TOP_ITEMS_LIMIT} barang berdasarkan akumulasi Nominal per Supplier{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''}{filters.supp.length ? ` · ${filters.supp.join(', ')}` : ''} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}{tanggal.length ? ` · Tgl ${tanggal.join(', ')}` : ''}
               </p>
             </div>
-            <ExportMenu targetRef={itemsRef} filename="barang-paling-banyak-diambil" />
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Supp"
+                  options={suppOptions.map((s) => ({ value: s, label: s }))}
+                  selected={filters.supp}
+                  onChange={filters.setSupp}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Depo"
+                  options={depoOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.depo}
+                  onChange={filters.setDepo}
+                  allLabel="Semua Depo"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Tanggal"
+                  options={tanggalOptions.map((t) => ({ value: String(t), label: `Tgl ${t}` }))}
+                  selected={tanggal.map(String)}
+                  onChange={(v) => setTanggal(v.map(Number))}
+                  allLabel="Semua Tanggal"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-28">
+                <MultiSelect
+                  label="Tahun"
+                  options={tahunOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
+              <ExportMenu targetRef={itemsRef} filename="barang-paling-banyak-diambil" />
+            </div>
           </div>
           <div className="mt-3">
             <BarChartCard
@@ -244,6 +401,148 @@ export default function OmsetHarian() {
         </div>
         </TabPanel>
 
+        <TabPanel id="perbandingan">
+        <div id="sec-rincian-perbandingan-harian" className="card p-5 scroll-mt-28" ref={harianComparisonRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
+            <div>
+              <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Harian</h3>
+              <p className="text-xs text-ink-400">
+                Perbandingan penjualan &amp; AO per tanggal antara Bulan A dan Bulan B (bisa bulan &amp; tahun yang berbeda) · {depoLabel(filters.depo)}{harianSuppFilter.length ? ` · ${harianSuppFilter.join(', ')}` : ''}{harianDsrFilter.length ? ` · ${harianDsrFilter.join(', ')}` : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <label className="flex flex-col gap-1 text-xs font-semibold">
+                Bulan A
+                <select
+                  value={harianBulanA}
+                  onChange={(e) => setHarianBulanA(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {MONTH_NAMES_FULL_ID.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold">
+                Tahun A
+                <select
+                  value={harianTahunA ?? ''}
+                  onChange={(e) => setHarianTahunA(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {tahunOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold">
+                Bulan B
+                <select
+                  value={harianBulanB}
+                  onChange={(e) => setHarianBulanB(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {MONTH_NAMES_FULL_ID.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold">
+                Tahun B
+                <select
+                  value={harianTahunB ?? ''}
+                  onChange={(e) => setHarianTahunB(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {tahunOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Supplier"
+                  options={suppOptions.map((s) => ({ value: s, label: s }))}
+                  selected={harianSuppFilter}
+                  onChange={setHarianSuppFilter}
+                  allLabel="Semua Supplier"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <MultiSelect
+                  label="Nama DSR"
+                  options={dsrOptions.map((d) => ({ value: d, label: d }))}
+                  selected={harianDsrFilter}
+                  onChange={setHarianDsrFilter}
+                  allLabel="Semua DSR"
+                />
+              </div>
+              <ExportMenu targetRef={harianComparisonRef} filename="rincian-perbandingan-harian" />
+            </div>
+          </div>
+
+          <DualAxisComboChart
+            data={dailyComparisonDSR.rows.map((r) => ({ ...r }))}
+            xKey="label"
+            bars={[
+              { key: 'salesA', color: CMP_COLORS.salesA, name: `Penjualan ${MONTH_NAMES_FULL_ID[harianBulanA - 1]} ${harianTahunALabel}` },
+              { key: 'salesB', color: CMP_COLORS.salesB, name: `Penjualan ${MONTH_NAMES_FULL_ID[harianBulanB - 1]} ${harianTahunBLabel}` },
+            ]}
+            lines={[
+              { key: 'aoA', color: CMP_COLORS.aoA, name: `AO ${MONTH_NAMES_FULL_ID[harianBulanA - 1]} ${harianTahunALabel}`, dashed: true },
+              { key: 'aoB', color: CMP_COLORS.aoB, name: `AO ${MONTH_NAMES_FULL_ID[harianBulanB - 1]} ${harianTahunBLabel}` },
+            ]}
+            leftFormatter={(v) => formatCompactRupiah(v)}
+            leftTooltipFormatter={(v) => formatRupiah(v)}
+            rightFormatter={(v) => formatNumber(v)}
+            rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
+          />
+
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Tanggal</th>
+                  <th className="py-2 pr-3 text-right">Penjualan {MONTH_NAMES_FULL_ID[harianBulanA - 1]} {harianTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan {MONTH_NAMES_FULL_ID[harianBulanB - 1]} {harianTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
+                  <th className="py-2 pr-3 text-right">AO {MONTH_NAMES_FULL_ID[harianBulanA - 1]} {harianTahunALabel}</th>
+                  <th className="py-2 pr-3 text-right">AO {MONTH_NAMES_FULL_ID[harianBulanB - 1]} {harianTahunBLabel}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyComparisonDSR.rows.map((d) => (
+                  <tr key={d.tanggal} className="border-b border-ink-50 dark:border-ink-800/60">
+                    <td className="py-2 pr-3 font-semibold">{d.label}</td>
+                    <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(d.salesA)}</td>
+                    <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(d.salesB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${d.salesGrowth === null ? 'text-ink-400' : d.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {d.salesGrowth === null ? '-' : `${d.salesGrowth >= 0 ? '+' : ''}${d.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.aoA }}>{formatNumber(d.aoA)}</td>
+                    <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.aoB }}>{formatNumber(d.aoB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${d.aoGrowth === null ? 'text-ink-400' : d.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {d.aoGrowth === null ? '-' : `${d.aoGrowth >= 0 ? '+' : ''}${d.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+                {dailyComparisonDSR.rows.length === 0 && (
+                  <tr><td colSpan={7} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
+                )}
+                {dailyComparisonDSR.grandTotal && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(dailyComparisonDSR.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(dailyComparisonDSR.grandTotal.salesB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dailyComparisonDSR.grandTotal.salesGrowth === null ? 'text-ink-400' : dailyComparisonDSR.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dailyComparisonDSR.grandTotal.salesGrowth === null ? '-' : `${dailyComparisonDSR.grandTotal.salesGrowth >= 0 ? '+' : ''}${dailyComparisonDSR.grandTotal.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoA }}>{formatNumber(dailyComparisonDSR.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.aoB }}>{formatNumber(dailyComparisonDSR.grandTotal.aoB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${dailyComparisonDSR.grandTotal.aoGrowth === null ? 'text-ink-400' : dailyComparisonDSR.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {dailyComparisonDSR.grandTotal.aoGrowth === null ? '-' : `${dailyComparisonDSR.grandTotal.aoGrowth >= 0 ? '+' : ''}${dailyComparisonDSR.grandTotal.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </TabPanel>
+
         <TabPanel id="riwayat">
         <div id="sec-riwayat-pengambilan" className="card p-5 scroll-mt-28" ref={historyRef}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
@@ -291,6 +590,15 @@ export default function OmsetHarian() {
                   selected={tanggal.map(String)}
                   onChange={(v) => setTanggal(v.map(Number))}
                   allLabel="Semua Tanggal"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <MultiSelect
+                  label="Sales"
+                  options={dsrOptions.map((d) => ({ value: d, label: d }))}
+                  selected={filters.dsr}
+                  onChange={filters.setDsr}
+                  allLabel="Semua Sales"
                 />
               </div>
               <div className="w-full sm:w-40">

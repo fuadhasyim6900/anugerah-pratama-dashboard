@@ -74,8 +74,9 @@ export default function BottomNav() {
 
       {/* Floating "buka menu" shortcut (mobile only) — stays fixed on screen
           at all times (not tied to scroll position like the buttons below),
-          so the sidebar is always one tap away without scrolling back up to
-          reach the TopBar's hamburger button. */}
+          so the sidebar is always one tap away without needing to scroll
+          back up to reach the TopBar's hamburger button (the desktop
+          equivalent lives in Sidebar.tsx for the same reason). */}
       <button
         type="button"
         onClick={() => setMobileNavOpen(true)}

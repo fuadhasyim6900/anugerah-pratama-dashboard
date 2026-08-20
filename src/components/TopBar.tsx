@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sun, Moon, Printer, FileDown, RefreshCw, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Sun, Moon, Printer, FileDown, RefreshCw, Menu } from 'lucide-react';
 import { useThemeStore } from '../store/theme';
 import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
@@ -9,7 +9,7 @@ import FilterPopover from './FilterPopover';
 export default function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
   const { dark, toggle } = useThemeStore();
   const { reload, lastUpdated, dataUpdatedAt, loading } = useSalesData();
-  const { sidebarCollapsed, toggleSidebarCollapsed, setMobileNavOpen } = useUIStore();
+  const { setMobileNavOpen } = useUIStore();
   const [exporting, setExporting] = useState<'page' | 'full' | null>(null);
 
   async function handleExportPage() {
@@ -23,7 +23,7 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
   }
 
   return (
-    <header className="no-print sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 dark:border-ink-800 bg-white/90 dark:bg-ink-900/90 backdrop-blur px-4 sm:px-6 py-3 sm:py-4">
+    <header className="no-print sticky top-0 z-[35] flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 dark:border-ink-800 bg-white/90 dark:bg-ink-900/90 backdrop-blur px-4 sm:px-6 py-3 sm:py-4">
       <div className="flex items-start gap-2 min-w-0">
         <button
           onClick={() => setMobileNavOpen(true)}
@@ -31,13 +31,6 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
           className="md:hidden flex items-center justify-center h-9 w-9 shrink-0 rounded-lg border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
         >
           <Menu size={16} />
-        </button>
-        <button
-          onClick={toggleSidebarCollapsed}
-          title={sidebarCollapsed ? 'Tampilkan sidebar' : 'Sembunyikan sidebar'}
-          className="hidden md:flex items-center justify-center h-9 w-9 shrink-0 rounded-lg border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
-        >
-          {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
         <div className="min-w-0">
           <h1 className="text-base sm:text-xl font-extrabold tracking-tight truncate">{title}</h1>

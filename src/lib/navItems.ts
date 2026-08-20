@@ -38,7 +38,6 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'sec-ao-dsr', label: 'Outlet Aktif (AO) DSR' },
       { id: 'sec-ranking-dsr-supplier', label: 'Ranking DSR per Supplier' },
       { id: 'sec-perbandingan-dsr', label: 'Tabel Rincian Perbandingan Bulanan' },
-      { id: 'sec-rincian-perbandingan-harian', label: 'Rincian Perbandingan Harian' },
       { id: 'sec-target-omset-supplier', label: 'Target vs Omset per Supplier' },
       { id: 'sec-distribusi-supplier-dsr', label: 'Distribusi Produk / Supplier DSR' },
     ],
@@ -48,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
     sections: [
       { id: 'sec-omset-harian', label: 'Grafik Omset Harian' },
       { id: 'sec-barang-terlaris', label: 'Barang Paling Banyak Diambil' },
+      { id: 'sec-rincian-perbandingan-harian', label: 'Rincian Perbandingan Harian' },
       { id: 'sec-riwayat-pengambilan', label: 'Riwayat Pengambilan Barang' },
     ],
   },
