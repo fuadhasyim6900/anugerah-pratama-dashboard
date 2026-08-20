@@ -91,18 +91,26 @@ async function insertBatched(table, rows) {
 // TGL FAKTUR bisa berupa objek Date (kalau cellDates:true berhasil
 // mendeteksi format tanggal sel), serial Excel, atau string "dd/mm/yyyy".
 //
-// PENTING soal timezone: saat SheetJS membaca sel bertipe Date dengan
-// cellDates:true, objek Date yang dihasilkan sudah punya tanggal yang benar
-// secara LOKAL (mis. tengah malam WIB tanggal 20). Kalau kita ambil
-// tanggalnya lewat v.toISOString() (yang membaca dalam UTC), di komputer
-// dengan timezone WIB (UTC+7) itu jadi jam 17:00 tanggal 19 UTC -> tanggal
-// mundur 1 hari. Makanya di sini kita HARUS pakai getFullYear/getMonth/
-// getDate (versi lokal), bukan toISOString(), supaya tanggal tidak geser.
+// PENTING soal timezone & presisi: saat SheetJS membaca sel bertipe Date
+// dengan cellDates:true, objek Date yang dihasilkan sudah punya tanggal yang
+// benar secara LOKAL (mis. tengah malam WIB tanggal 20) -- jadi kita harus
+// pakai getFullYear/getMonth/getDate (versi lokal), BUKAN toISOString()
+// (versi UTC), supaya tanggal tidak geser gara-gara timezone.
+//
+// TAPI: serial tanggal Excel disimpan sebagai angka desimal (floating
+// point), dan itu kadang tidak benar-benar bulat -- misalnya alih-alih
+// persis 00:00:00 tengah malam, hasilnya jadi 23:59:56 (meleset beberapa
+// detik). Kalau tidak diantisipasi, "23:59:56 tanggal 19" itu terbaca
+// sebagai tanggal 19, padahal maksudnya tanggal 20. Makanya sebelum
+// membaca tahun/bulan/tanggalnya, waktunya dibulatkan ke MENIT terdekat
+// dulu -- itu cukup untuk menghilangkan noise beberapa detik ini tanpa
+// mengubah tanggal untuk kasus normal.
 function toIsoDate(v) {
   if (v instanceof Date && !isNaN(v.getTime())) {
-    const yyyy = v.getFullYear();
-    const mm = String(v.getMonth() + 1).padStart(2, '0');
-    const dd = String(v.getDate()).padStart(2, '0');
+    const rounded = new Date(Math.round(v.getTime() / 60000) * 60000);
+    const yyyy = rounded.getFullYear();
+    const mm = String(rounded.getMonth() + 1).padStart(2, '0');
+    const dd = String(rounded.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
   if (typeof v === 'number') {
