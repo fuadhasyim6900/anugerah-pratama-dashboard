@@ -40,6 +40,14 @@ const PAGE_SIZE = 10000;
 // kuota Supabase jadi masalah, angka ini bisa dinaikkan lagi.
 const CACHE_SECONDS = 60;
 
+// Berapa banyak request boleh berjalan BERSAMAAN ke Supabase. Sebelumnya
+// SEMUA halaman ditembak paralel sekaligus (bisa ±27 request untuk tabel
+// `sales`) -- ini membanjiri compute Supabase (apalagi di project kecil),
+// bikin query lain ikut melambat dan lebih mudah kena statement timeout.
+// Membatasi ke beberapa saja tetap jauh lebih cepat daripada satu-satu,
+// tanpa membebani database sampai timeout.
+const CONCURRENCY = 4;
+
 async function fetchAllRows(supabase, table, columns) {
   const { count, error: countError } = await supabase
     .from(table)
@@ -51,34 +59,86 @@ async function fetchAllRows(supabase, table, columns) {
 
   // Langkah 1: "tes" dulu satu halaman untuk tahu ukuran SEBENARNYA yang
   // dikembalikan Supabase (bisa jadi dipotong ke "Max Rows" Supabase,
-  // berapa pun PAGE_SIZE yang kita minta di sini).
+  // berapa pun PAGE_SIZE yang kita minta di sini). Diurutkan naik
+  // berdasarkan `id` (primary key, sudah ber-index) supaya halaman
+  // berikutnya bisa dilanjutkan dari id terakhir -- BUKAN dari OFFSET.
+  //
+  // Kenapa ganti dari OFFSET (.range()) ke keyset (id) pagination:
+  // OFFSET di Postgres itu mahal untuk tabel besar -- untuk sampai ke
+  // OFFSET 250.000, Postgres tetap harus memindai & membuang 250.000 baris
+  // sebelumnya lebih dulu. Untuk tabel `sales` (±262.000 baris, ±27
+  // halaman) ini bikin halaman-halaman belakang jadi berat, dan kalau
+  // ditembak paralel sekaligus -> gampang kena "statement timeout".
+  // Filter berdasar `id` (WHERE id > x ORDER BY id LIMIT n) memakai index
+  // seek, jadi SAMA CEPATNYA di halaman manapun, tidak peduli posisinya.
   const { data: firstPage, error: firstError } = await supabase
     .from(table)
     .select(columns)
-    .range(0, PAGE_SIZE - 1);
+    .order('id', { ascending: true })
+    .limit(PAGE_SIZE);
   if (firstError) throw new Error(`Gagal memuat "${table}": ${firstError.message}`);
   const first = firstPage ?? [];
   const actualPageSize = first.length;
 
   const all = [...first];
 
-  // Langkah 2: kalau masih ada sisa, sekarang kita SUDAH TAHU ukuran
-  // halaman yang sebenarnya -> aman menembak semua sisanya SEKALIGUS
-  // secara paralel (bukan satu-satu), jauh lebih cepat.
   if (actualPageSize > 0 && all.length < total) {
-    const remainingStarts = [];
-    for (let from = actualPageSize; from < total; from += actualPageSize) {
-      remainingStarts.push(from);
+    // Perlu tahu id kolom dari halaman pertama untuk menghitung rentang id
+    // per potongan berikutnya. `columns` yang diminta caller belum tentu
+    // menyertakan `id`, jadi kita ambil batas id lewat query terpisah yang
+    // ringan (hanya kolom id, index-only, sangat cepat).
+    const { data: lastIdRow, error: lastIdError } = await supabase
+      .from(table)
+      .select('id')
+      .order('id', { ascending: true })
+      .range(actualPageSize - 1, actualPageSize - 1);
+    if (lastIdError) throw new Error(`Gagal membaca id "${table}": ${lastIdError.message}`);
+    const lastIdOfFirstPage = lastIdRow?.[0]?.id;
+
+    const { data: maxIdRow, error: maxIdError } = await supabase
+      .from(table)
+      .select('id')
+      .order('id', { ascending: false })
+      .limit(1);
+    if (maxIdError) throw new Error(`Gagal membaca id maksimum "${table}": ${maxIdError.message}`);
+    const maxId = maxIdRow?.[0]?.id;
+
+    if (lastIdOfFirstPage != null && maxId != null && lastIdOfFirstPage < maxId) {
+      // Rentang id yang dicakup oleh halaman pertama (dipakai sebagai
+      // ukuran "langkah" id untuk potongan-potongan berikutnya, supaya
+      // masing-masing potongan diperkirakan berukuran actualPageSize
+      // baris juga -- konsisten dengan batas Max Rows Supabase).
+      const idStep = Math.max(lastIdOfFirstPage, 1);
+
+      const chunkStarts = [];
+      for (let from = lastIdOfFirstPage + 1; from <= maxId; from += idStep) {
+        chunkStarts.push(from);
+      }
+
+      // Langkah 2: jalankan potongan-potongan sisanya dengan concurrency
+      // terbatas (worker pool), bukan semua sekaligus.
+      const results = new Array(chunkStarts.length);
+      let nextIndex = 0;
+      async function worker() {
+        for (;;) {
+          const i = nextIndex++;
+          if (i >= chunkStarts.length) return;
+          const from = chunkStarts[i];
+          const to = from + idStep - 1;
+          const { data, error } = await supabase
+            .from(table)
+            .select(columns)
+            .gte('id', from)
+            .lte('id', to)
+            .order('id', { ascending: true });
+          if (error) throw new Error(`Gagal memuat "${table}" (id ${from}-${to}): ${error.message}`);
+          results[i] = data ?? [];
+        }
+      }
+      const workerCount = Math.min(CONCURRENCY, chunkStarts.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      for (const page of results) all.push(...page);
     }
-    const pages = await Promise.all(
-      remainingStarts.map(async (from) => {
-        const to = from + actualPageSize - 1;
-        const { data, error } = await supabase.from(table).select(columns).range(from, to);
-        if (error) throw new Error(`Gagal memuat "${table}": ${error.message}`);
-        return data ?? [];
-      })
-    );
-    for (const page of pages) all.push(...page);
   }
 
   // Jaring pengaman: kalau jumlah akhir tidak cocok dengan jumlah asli,
