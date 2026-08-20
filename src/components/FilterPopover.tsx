@@ -13,7 +13,7 @@ import MultiSelect from './MultiSelect';
 // itu sendiri (menyaring seluruh halaman lewat useFilterStore) tidak
 // berubah.
 export default function FilterPopover() {
-  const { depo, dsr, supp, bulan, tahun, setDepo, setDsr, setSupp, setBulan, setTahun } = useFilterStore();
+  const { depo, dsr, supp, bulan, tahun, setDepo, setDsr, setSupp, setBulan, setTahun, reset } = useFilterStore();
   const { sales } = useSalesData();
   const depoList = DEPO_LIST_EXCLUDING_ADMIN(sales);
   const dsrList = useMemo(
@@ -156,7 +156,7 @@ export default function FilterPopover() {
           {activeCount > 0 && (
             <button
               type="button"
-              onClick={() => { setDepo([]); setDsr([]); setSupp([]); setBulan([]); setTahun([]); }}
+              onClick={reset}
               className="w-full text-center px-3 py-2 rounded-lg text-xs font-semibold border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
             >
               Reset Semua Filter

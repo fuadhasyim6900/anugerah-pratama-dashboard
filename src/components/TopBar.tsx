@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Sun, Moon, Printer, FileDown, RefreshCw, Menu } from 'lucide-react';
+import { Sun, Moon, Printer, FileDown, RefreshCw, Menu, FilterX } from 'lucide-react';
 import { useThemeStore } from '../store/theme';
 import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
+import { useFilterStore } from '../store/filters';
 import { exportActivePageToPdf, exportFullReportToPdf } from '../lib/exportPdf';
 import FilterPopover from './FilterPopover';
 
@@ -10,7 +11,9 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
   const { dark, toggle } = useThemeStore();
   const { reload, lastUpdated, dataUpdatedAt, loading } = useSalesData();
   const { setMobileNavOpen } = useUIStore();
+  const { depo, dsr, supp, bulan, tahun, reset } = useFilterStore();
   const [exporting, setExporting] = useState<'page' | 'full' | null>(null);
+  const activeFilterCount = depo.length + dsr.length + supp.length + bulan.length + tahun.length;
 
   async function handleExportPage() {
     setExporting('page');
@@ -50,6 +53,16 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
 
       <div className="flex items-center gap-2 flex-wrap">
         <FilterPopover />
+
+        {activeFilterCount > 0 && (
+          <button
+            onClick={reset}
+            title="Hapus semua filter yang aktif"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-ink-200 dark:border-ink-700 hover:bg-ink-50 dark:hover:bg-ink-800"
+          >
+            <FilterX size={14} /> <span className="hidden sm:inline">Reset Filter</span>
+          </button>
+        )}
 
         <button
           onClick={() => reload()}

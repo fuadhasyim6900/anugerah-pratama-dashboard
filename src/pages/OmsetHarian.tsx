@@ -12,7 +12,7 @@ import { useSalesData } from '../hooks/useSalesData';
 import { useFilterStore } from '../store/filters';
 import {
   applyFilters, sumNominal, distinctCount, formatRupiah, formatNumber, formatCompactRupiah,
-  depoLabel, bulanLabel, tahunLabel, DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST, distinctDSR,
+  depoLabel, bulanLabel, tahunLabel, DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST, activeDsrList,
 } from '../lib/aggregate';
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
@@ -60,16 +60,38 @@ export default function OmsetHarian() {
   const itemTotalQty = useMemo(() => itemRows.reduce((a, r) => a + r.qty, 0), [itemRows]);
   const itemTotalNominal = useMemo(() => itemRows.reduce((a, r) => a + r.nominal, 0), [itemRows]);
 
-  // Daftar pilihan Depo/Sales DSR/Supplier/Tahun (dari seluruh data, tidak
-  // ikut tersaring filter aktif) — dipakai sebagai kontrol filter lokal di
-  // tiap section halaman ini (Grafik Harian, Barang Terlaris, Perbandingan
-  // Harian, Riwayat Pengambilan), semuanya langsung memakai filter global di
-  // sidebar (filters.setDepo/setDsr/setSupp/setBulan/setTahun) supaya tetap
-  // sinkron dengan tombol Filter di atas & halaman lain.
+  // Daftar pilihan Depo/Sales DSR/Supplier/Tahun — dipakai sebagai kontrol
+  // filter lokal di tiap section halaman ini (Grafik Harian, Barang
+  // Terlaris, Perbandingan Harian, Riwayat Pengambilan), semuanya langsung
+  // memakai filter global di sidebar (filters.setDepo/setDsr/setSupp/
+  // setBulan/setTahun) supaya tetap sinkron dengan tombol Filter di atas &
+  // halaman lain. Depo/Supplier/Tahun tetap daftar dari seluruh data (sama
+  // seperti FilterPopover di TopBar).
+  //
+  // "Sales" dikecualikan: daftarnya disaring pakai activeDsrList (fungsi yang
+  // sama dipakai FilterPopover) supaya hanya menampilkan sales yang memang
+  // punya transaksi pada Depo/Bulan/Tahun yang sedang aktif — mis. kalau
+  // Depo=Jepara, Bulan=Agustus, Tahun=2026 dipilih, dropdown Sales di semua
+  // section halaman ini (Grafik Harian, Barang Terlaris, Riwayat) hanya akan
+  // menampilkan sales yang aktif di kombinasi itu, bukan semua sales di
+  // seluruh data.
   const depoOptions = useMemo(() => DEPO_LIST_EXCLUDING_ADMIN(sales), [sales]);
   const suppOptions = useMemo(() => SUPP_LIST(sales), [sales]);
-  const dsrOptions = useMemo(() => distinctDSR(sales), [sales]);
+  const dsrOptions = useMemo(
+    () => activeDsrList(sales, filters.depo, filters.bulan, filters.tahun),
+    [sales, filters.depo, filters.bulan, filters.tahun]
+  );
   const tahunOptions = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+
+  // Kalau Sales yang sedang dipilih ternyata tidak ada transaksi di
+  // Depo/Bulan/Tahun yang baru, otomatis buang pilihan tsb — supaya grafik
+  // tidak jadi kosong tanpa alasan jelas & filter chip tidak menyimpan
+  // pilihan "mati" (sama seperti perilaku FilterPopover).
+  useEffect(() => {
+    if (filters.dsr && filters.dsr.some((d) => !dsrOptions.includes(d))) {
+      filters.setDsr(filters.dsr.filter((d) => dsrOptions.includes(d)));
+    }
+  }, [dsrOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Tabel Rincian Perbandingan Harian ---------------------------------
   // Perbandingan penjualan & AO per tanggal antara Bulan A dan Bulan B (bisa
