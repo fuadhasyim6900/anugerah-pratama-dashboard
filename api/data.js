@@ -13,7 +13,23 @@ import zlib from 'node:zlib';
 // CACHE_SECONDS di bawah. Selama jendela cache itu, Supabase hanya diakses
 // SEKALI walau ada ratusan kunjungan dari puluhan sales berbeda.
 
-const PAGE_SIZE = 1000;
+// Ukuran per-halaman saat mengambil data dari Supabase. HARUS <= "Max Rows"
+// yang di-set di Supabase Dashboard -> Project Settings -> API (defaultnya
+// 1000 di Supabase, kalau belum dinaikkan di sana, angka di bawah ini akan
+// tetap dipotong jadi 1000 oleh Supabase walau ditulis lebih besar di sini).
+// Page lebih besar = lebih sedikit request paralel ke Supabase saat cache
+// MISS = lebih cepat. Contoh: 262.000 baris / 1000 = ±262 request paralel
+// (lambat) vs / 10000 = ±27 request paralel (jauh lebih cepat).
+// Ukuran per-halaman yang DIMINTA dari Supabase. Ini cuma "permintaan" --
+// kalau Supabase Dashboard -> Project Settings -> API -> "Max Rows" di-set
+// lebih kecil dari angka ini (default Supabase: 1000), Supabase akan tetap
+// memotong hasilnya ke angka Max Rows itu, BUKAN error. Makanya di bawah,
+// setiap halaman berikutnya dimulai dari JUMLAH BARIS YANG BENAR-BENAR
+// KEMBALI (rows.length), bukan dari PAGE_SIZE ini -- supaya tetap benar
+// (tidak ada baris yang terlewat) berapa pun "Max Rows" di Supabase.
+// Menaikkan "Max Rows" di Supabase tetap bermanfaat untuk KECEPATAN (lebih
+// sedikit request bolak-balik), tapi sekarang bukan syarat KEBENARAN data.
+const PAGE_SIZE = 10000;
 
 // Cache 60 detik. Artinya: paling lama 1 menit setelah Anda menjalankan
 // `node --env-file=.env scripts/sync-data.mjs`, semua sales yang buka
@@ -33,19 +49,49 @@ async function fetchAllRows(supabase, table, columns) {
   const total = count ?? 0;
   if (total === 0) return [];
 
-  const pageStarts = [];
-  for (let from = 0; from < total; from += PAGE_SIZE) pageStarts.push(from);
+  // Langkah 1: "tes" dulu satu halaman untuk tahu ukuran SEBENARNYA yang
+  // dikembalikan Supabase (bisa jadi dipotong ke "Max Rows" Supabase,
+  // berapa pun PAGE_SIZE yang kita minta di sini).
+  const { data: firstPage, error: firstError } = await supabase
+    .from(table)
+    .select(columns)
+    .range(0, PAGE_SIZE - 1);
+  if (firstError) throw new Error(`Gagal memuat "${table}": ${firstError.message}`);
+  const first = firstPage ?? [];
+  const actualPageSize = first.length;
 
-  const pages = await Promise.all(
-    pageStarts.map(async (from) => {
-      const to = from + PAGE_SIZE - 1;
-      const { data, error } = await supabase.from(table).select(columns).range(from, to);
-      if (error) throw new Error(`Gagal memuat "${table}": ${error.message}`);
-      return data ?? [];
-    })
-  );
+  const all = [...first];
 
-  return pages.flat();
+  // Langkah 2: kalau masih ada sisa, sekarang kita SUDAH TAHU ukuran
+  // halaman yang sebenarnya -> aman menembak semua sisanya SEKALIGUS
+  // secara paralel (bukan satu-satu), jauh lebih cepat.
+  if (actualPageSize > 0 && all.length < total) {
+    const remainingStarts = [];
+    for (let from = actualPageSize; from < total; from += actualPageSize) {
+      remainingStarts.push(from);
+    }
+    const pages = await Promise.all(
+      remainingStarts.map(async (from) => {
+        const to = from + actualPageSize - 1;
+        const { data, error } = await supabase.from(table).select(columns).range(from, to);
+        if (error) throw new Error(`Gagal memuat "${table}": ${error.message}`);
+        return data ?? [];
+      })
+    );
+    for (const page of pages) all.push(...page);
+  }
+
+  // Jaring pengaman: kalau jumlah akhir tidak cocok dengan jumlah asli,
+  // LEBIH BAIK GAGAL KERAS (error 500) DARIPADA diam-diam menampilkan data
+  // yang kurang ke sales -- ini yang sebelumnya terjadi tanpa terlihat.
+  if (all.length !== total) {
+    throw new Error(
+      `Data "${table}" tidak lengkap: diharapkan ${total} baris, hanya dapat ${all.length}. ` +
+        'Coba lagi; kalau terus terjadi, cek koneksi/limit Supabase.'
+    );
+  }
+
+  return all;
 }
 
 export default async function handler(req, res) {
