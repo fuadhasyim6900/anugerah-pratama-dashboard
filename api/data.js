@@ -57,89 +57,86 @@ async function fetchAllRows(supabase, table, columns) {
   const total = count ?? 0;
   if (total === 0) return [];
 
-  // Langkah 1: "tes" dulu satu halaman untuk tahu ukuran SEBENARNYA yang
-  // dikembalikan Supabase (bisa jadi dipotong ke "Max Rows" Supabase,
-  // berapa pun PAGE_SIZE yang kita minta di sini). Diurutkan naik
-  // berdasarkan `id` (primary key, sudah ber-index) supaya halaman
-  // berikutnya bisa dilanjutkan dari id terakhir -- BUKAN dari OFFSET.
-  //
-  // Kenapa ganti dari OFFSET (.range()) ke keyset (id) pagination:
-  // OFFSET di Postgres itu mahal untuk tabel besar -- untuk sampai ke
-  // OFFSET 250.000, Postgres tetap harus memindai & membuang 250.000 baris
-  // sebelumnya lebih dulu. Untuk tabel `sales` (±262.000 baris, ±27
-  // halaman) ini bikin halaman-halaman belakang jadi berat, dan kalau
-  // ditembak paralel sekaligus -> gampang kena "statement timeout".
-  // Filter berdasar `id` (WHERE id > x ORDER BY id LIMIT n) memakai index
-  // seek, jadi SAMA CEPATNYA di halaman manapun, tidak peduli posisinya.
-  const { data: firstPage, error: firstError } = await supabase
+  // Ambil batas id (index-only, sangat cepat, tidak peduli seberapa besar
+  // atau "bolong" tabelnya) untuk membagi pekerjaan jadi beberapa JALUR
+  // paralel. Kita TIDAK menebak ukuran langkah id dari satu halaman contoh
+  // (percobaan sebelumnya salah: kalau tabel sudah pernah di-sync ulang,
+  // id tidak mulai dari 1, jadi tebakan langkahnya meleset jauh dan banyak
+  // baris terlewat tanpa error apapun).
+  const { data: minRow, error: minError } = await supabase
     .from(table)
-    .select(columns)
+    .select('id')
     .order('id', { ascending: true })
-    .limit(PAGE_SIZE);
-  if (firstError) throw new Error(`Gagal memuat "${table}": ${firstError.message}`);
-  const first = firstPage ?? [];
-  const actualPageSize = first.length;
+    .limit(1);
+  if (minError) throw new Error(`Gagal membaca id minimum "${table}": ${minError.message}`);
+  const { data: maxRow, error: maxError } = await supabase
+    .from(table)
+    .select('id')
+    .order('id', { ascending: false })
+    .limit(1);
+  if (maxError) throw new Error(`Gagal membaca id maksimum "${table}": ${maxError.message}`);
+  const minId = minRow?.[0]?.id;
+  const maxId = maxRow?.[0]?.id;
+  if (minId == null || maxId == null) return [];
 
-  const all = [...first];
-
-  if (actualPageSize > 0 && all.length < total) {
-    // Perlu tahu id kolom dari halaman pertama untuk menghitung rentang id
-    // per potongan berikutnya. `columns` yang diminta caller belum tentu
-    // menyertakan `id`, jadi kita ambil batas id lewat query terpisah yang
-    // ringan (hanya kolom id, index-only, sangat cepat).
-    const { data: lastIdRow, error: lastIdError } = await supabase
-      .from(table)
-      .select('id')
-      .order('id', { ascending: true })
-      .range(actualPageSize - 1, actualPageSize - 1);
-    if (lastIdError) throw new Error(`Gagal membaca id "${table}": ${lastIdError.message}`);
-    const lastIdOfFirstPage = lastIdRow?.[0]?.id;
-
-    const { data: maxIdRow, error: maxIdError } = await supabase
-      .from(table)
-      .select('id')
-      .order('id', { ascending: false })
-      .limit(1);
-    if (maxIdError) throw new Error(`Gagal membaca id maksimum "${table}": ${maxIdError.message}`);
-    const maxId = maxIdRow?.[0]?.id;
-
-    if (lastIdOfFirstPage != null && maxId != null && lastIdOfFirstPage < maxId) {
-      // Rentang id yang dicakup oleh halaman pertama (dipakai sebagai
-      // ukuran "langkah" id untuk potongan-potongan berikutnya, supaya
-      // masing-masing potongan diperkirakan berukuran actualPageSize
-      // baris juga -- konsisten dengan batas Max Rows Supabase).
-      const idStep = Math.max(lastIdOfFirstPage, 1);
-
-      const chunkStarts = [];
-      for (let from = lastIdOfFirstPage + 1; from <= maxId; from += idStep) {
-        chunkStarts.push(from);
-      }
-
-      // Langkah 2: jalankan potongan-potongan sisanya dengan concurrency
-      // terbatas (worker pool), bukan semua sekaligus.
-      const results = new Array(chunkStarts.length);
-      let nextIndex = 0;
-      async function worker() {
-        for (;;) {
-          const i = nextIndex++;
-          if (i >= chunkStarts.length) return;
-          const from = chunkStarts[i];
-          const to = from + idStep - 1;
-          const { data, error } = await supabase
-            .from(table)
-            .select(columns)
-            .gte('id', from)
-            .lte('id', to)
-            .order('id', { ascending: true });
-          if (error) throw new Error(`Gagal memuat "${table}" (id ${from}-${to}): ${error.message}`);
-          results[i] = data ?? [];
-        }
-      }
-      const workerCount = Math.min(CONCURRENCY, chunkStarts.length);
-      await Promise.all(Array.from({ length: workerCount }, () => worker()));
-      for (const page of results) all.push(...page);
-    }
+  // Bagi rentang [minId, maxId] jadi CONCURRENCY potongan yang kira-kira
+  // sama besar. Tiap jalur menyisir potongannya SENDIRI secara berurutan
+  // memakai keyset/cursor (WHERE id >= cursor AND id <= akhir ORDER BY id
+  // LIMIT n), lalu memajukan cursor ke id TERAKHIR YANG BENAR-BENAR
+  // DIDAPAT + 1 setiap putaran, sampai potongan itu habis. Ini otomatis
+  // benar berapa pun ukuran halaman yang sebenarnya dikembalikan Supabase
+  // (termasuk kalau dipotong ke "Max Rows"-nya) dan berapa pun besar
+  // "lompatan" id di tabel (misalnya bekas sync-sync sebelumnya) --
+  // TIDAK ADA tebakan ukuran langkah yang bisa meleset seperti sebelumnya.
+  //
+  // `id` perlu ikut diminta ke Supabase supaya kita tahu harus lanjut dari
+  // mana, walau caller (`columns`) tidak selalu memintanya -- makanya
+  // 'id' dilepas lagi dari tiap baris sebelum dikembalikan, supaya bentuk
+  // datanya persis seperti yang diminta caller.
+  const columnsWithId = `id,${columns}`;
+  const span = maxId - minId + 1;
+  const rangeSize = Math.max(Math.ceil(span / CONCURRENCY), 1);
+  const ranges = [];
+  for (let start = minId; start <= maxId; start += rangeSize) {
+    ranges.push({ start, end: Math.min(start + rangeSize - 1, maxId) });
   }
+
+  const results = await Promise.all(
+    ranges.map(async ({ start, end }) => {
+      const rows = [];
+      let cursor = start;
+      while (cursor <= end) {
+        const { data, error } = await supabase
+          .from(table)
+          .select(columnsWithId)
+          .gte('id', cursor)
+          .lte('id', end)
+          .order('id', { ascending: true })
+          .limit(PAGE_SIZE);
+        if (error) throw new Error(`Gagal memuat "${table}" (id ${cursor}-${end}): ${error.message}`);
+        const page = data ?? [];
+        if (page.length === 0) break;
+        for (const row of page) {
+          const { id, ...rest } = row;
+          rows.push(rest);
+        }
+        const lastId = page[page.length - 1].id;
+        if (lastId == null) break;
+        // PENTING: jangan berhenti hanya karena baris yang kembali lebih
+        // sedikit dari PAGE_SIZE yang diminta -- itu BUKAN tanda sudah
+        // habis, karena Supabase bisa memotong hasil ke "Max Rows"-nya
+        // sendiri (bisa jauh lebih kecil dari PAGE_SIZE) tanpa memberi
+        // tahu. Satu-satunya tanda potongan ini benar-benar habis adalah
+        // saat sebuah query mengembalikan 0 baris. Jadi selalu lanjutkan
+        // dari id terakhir + 1 sampai itu terjadi (atau cursor lewat
+        // batas akhir potongan).
+        cursor = lastId + 1;
+      }
+      return rows;
+    })
+  );
+
+  const all = results.flat();
 
   // Jaring pengaman: kalau jumlah akhir tidak cocok dengan jumlah asli,
   // LEBIH BAIK GAGAL KERAS (error 500) DARIPADA diam-diam menampilkan data
