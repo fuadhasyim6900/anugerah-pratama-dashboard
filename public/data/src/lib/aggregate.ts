@@ -25,26 +25,11 @@ export function applyFilters(rows: SalesRow[], f: Filters): SalesRow[] {
   return rows.filter((r) => {
     if (f.tahun.length && !f.tahun.includes(r.tahun)) return false;
     if (f.depo.length && !f.depo.includes(r.depo)) return false;
-    if (f.dsr && f.dsr.length && !f.dsr.includes(dsrLabel(r))) return false;
+    if (f.dsr && f.dsr.length && !f.dsr.includes(r.sales)) return false;
     if (f.supp && f.supp.length && !f.supp.includes(r.supp)) return false;
     if (f.bulan.length && !f.bulan.includes(r.monthNum)) return false;
     return true;
   });
-}
-
-// --- ADMIN Telemarketing vs Non-Telemarketing ------------------------------
-// Previously "ADMIN" sales were split into "ADMIN (Telemarketing)" /
-// "ADMIN (Non-Telemarketing)" using the TELE column. That distinction has
-// been removed per request — all ADMIN rows are now grouped together as a
-// single "ADMIN" DSR again. `dsrLabel`/`rawDsrName` are kept as identity
-// pass-throughs (rather than reverting every call site) so DSR names are
-// simply whatever is in the SALES column, unchanged.
-export function dsrLabel(r: SalesRow): string {
-  return r.sales;
-}
-
-export function rawDsrName(label: string): string {
-  return label;
 }
 
 // Human-readable summaries of the current multi-select filters, used in page
@@ -108,7 +93,7 @@ export function sumTarget(
   supp: string[] = []
 ): number {
   const idxs = monthNums.map((m) => m - 1).filter((i) => i >= 0 && i <= 11);
-  const dsrSet = new Set(dsr.map((d) => rawDsrName(d).trim().toUpperCase()));
+  const dsrSet = new Set(dsr.map((d) => d.trim().toUpperCase()));
   const suppSet = new Set(supp.map((s) => s.trim().toUpperCase()));
   return targets
     .filter((t) =>
@@ -158,9 +143,7 @@ export function aoByMonth(rows: SalesRow[]): { bulan: string; ao: number }[] {
 
 export function formatRupiah(value: number, forceInteger = false): string {
   const rounded = forceInteger || !Number.isInteger(value) ? Math.round(value) : value;
-  // Non-breaking space between "Rp" and the number so it never wraps onto
-  // two lines in narrow table columns.
-  return 'Rp\u00A0' + rounded.toLocaleString('id-ID', { maximumFractionDigits: 0 });
+  return 'Rp ' + rounded.toLocaleString('id-ID', { maximumFractionDigits: 0 });
 }
 
 export function formatNumber(value: number): string {
@@ -185,7 +168,7 @@ export function safeAverage(total: number, count: number): number {
 }
 
 export function distinctDSR(rows: SalesRow[]): string[] {
-  return Array.from(new Set(rows.filter((r) => r.sales).map((r) => dsrLabel(r)))).sort();
+  return Array.from(new Set(rows.map((r) => r.sales).filter((s) => s))).sort();
 }
 
 // Distinct DSR (sales) list scoped to the selected Depo/Tahun, and to the
@@ -208,21 +191,14 @@ export function activeDsrList(rows: SalesRow[], depo: string[], bulan: number[],
 }
 
 export function salesByDSR(rows: SalesRow[]): { dsr: string; nominal: number }[] {
-  const map = new Map<string, number>();
-  for (const r of rows) {
-    if (!r.sales) continue;
-    const key = dsrLabel(r);
-    map.set(key, (map.get(key) || 0) + r.nominal);
-  }
-  return Array.from(map.entries())
-    .map(([dsr, nominal]) => ({ dsr, nominal }))
-    .sort((a, b) => b.nominal - a.nominal);
+  return groupSumBy(rows.filter((r) => r.sales), 'sales')
+    .map((g) => ({ dsr: g.label, nominal: g.value }));
 }
 
 export function avgMonthlyAOByDSR(rows: SalesRow[]): { dsr: string; avgAo: number }[] {
   const dsrs = distinctDSR(rows);
   return dsrs.map((dsr) => {
-    const dsrRows = rows.filter((r) => dsrLabel(r) === dsr);
+    const dsrRows = rows.filter((r) => r.sales === dsr);
     const byMonth = new Map<number, Set<string>>();
     for (const r of dsrRows) {
       if (!byMonth.has(r.monthNum)) byMonth.set(r.monthNum, new Set());
@@ -240,7 +216,7 @@ export function telemarketingContribution(rows: SalesRow[]): number {
 }
 
 export function supplierBreakdownForDSR(rows: SalesRow[], dsr: string) {
-  const dsrRows = rows.filter((r) => dsrLabel(r) === dsr);
+  const dsrRows = rows.filter((r) => r.sales === dsr);
   const total = sumNominal(dsrRows);
   const bySupplier = groupSumBy(dsrRows, 'supp');
   const aoBySupplier = new Map<string, Set<string>>();
@@ -302,9 +278,8 @@ export function dsrRankingBySupplier(rows: SalesRow[]): { rows: DsrBySupplierRow
   const map = new Map<string, { omset: number; ao: Set<string> }>();
   for (const r of rows) {
     if (!r.sales) continue;
-    const key = dsrLabel(r);
-    if (!map.has(key)) map.set(key, { omset: 0, ao: new Set() });
-    const entry = map.get(key)!;
+    if (!map.has(r.sales)) map.set(r.sales, { omset: 0, ao: new Set() });
+    const entry = map.get(r.sales)!;
     entry.omset += r.nominal;
     entry.ao.add(r.kdGrup);
   }
@@ -329,7 +304,7 @@ export function targetForDSR(
   const monthIdxs = (opts.bulan.length ? opts.bulan : Array.from({ length: 12 }, (_, i) => i + 1))
     .map((m) => m - 1)
     .filter((i) => i >= 0 && i <= 11);
-  const dsrKey = rawDsrName(opts.dsr).trim().toUpperCase();
+  const dsrKey = opts.dsr.trim().toUpperCase();
   return targets
     .filter((t) => t.namaSalesman.trim().toUpperCase() === dsrKey
       && (opts.depo.length === 0 || opts.depo.includes(t.depo))
@@ -363,14 +338,13 @@ export function targetVsOmsetBySupplier(
   const monthIdxs = (opts.bulan.length ? opts.bulan : Array.from({ length: 12 }, (_, i) => i + 1))
     .map((m) => m - 1)
     .filter((i) => i >= 0 && i <= 11);
-  const dsrSetRaw = new Set(opts.dsr.map((d) => rawDsrName(d).trim().toUpperCase()));
-  const dsrSetLabel = new Set(opts.dsr);
+  const dsrSet = new Set(opts.dsr.map((d) => d.trim().toUpperCase()));
   const suppSet = new Set((opts.supp || []).map((s) => s.trim().toUpperCase()));
 
   const filteredTargets = targets.filter((t) => {
     if (opts.depo.length && !opts.depo.includes(t.depo)) return false;
     if (opts.tahun.length && !opts.tahun.includes(t.tahun)) return false;
-    if (dsrSetRaw.size && !dsrSetRaw.has(t.namaSalesman.trim().toUpperCase())) return false;
+    if (dsrSet.size && !dsrSet.has(t.namaSalesman.trim().toUpperCase())) return false;
     if (suppSet.size && !suppSet.has(t.supplier.trim().toUpperCase())) return false;
     return true;
   });
@@ -379,7 +353,7 @@ export function targetVsOmsetBySupplier(
     if (opts.depo.length && !opts.depo.includes(r.depo)) return false;
     if (opts.bulan.length && !opts.bulan.includes(r.monthNum)) return false;
     if (opts.tahun.length && !opts.tahun.includes(r.tahun)) return false;
-    if (dsrSetLabel.size && !dsrSetLabel.has(dsrLabel(r))) return false;
+    if (dsrSet.size && !dsrSet.has(r.sales.trim().toUpperCase())) return false;
     if (suppSet.size && !suppSet.has(r.supp.trim().toUpperCase())) return false;
     return true;
   });

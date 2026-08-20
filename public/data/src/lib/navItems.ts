@@ -29,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'sec-omset-per-depo', label: 'Omset per Depo' },
       { id: 'sec-target-vs-realisasi', label: 'Target vs Realisasi' },
       { id: 'sec-ao-persupplier', label: 'AO Persupplier' },
+      { id: 'sec-perbandingan-bulanan', label: 'Perbandingan Bulanan' },
     ],
   },
   {
@@ -36,11 +37,10 @@ export const NAV_ITEMS: NavItem[] = [
     sections: [
       { id: 'sec-peringkat-dsr', label: 'Peringkat Penjualan DSR' },
       { id: 'sec-ao-dsr', label: 'Outlet Aktif (AO) DSR' },
-      { id: 'sec-ranking-dsr-supplier', label: 'Ranking DSR per Supplier' },
-      { id: 'sec-perbandingan-dsr', label: 'Tabel Rincian Perbandingan Bulanan' },
-      { id: 'sec-rincian-perbandingan-harian', label: 'Rincian Perbandingan Harian' },
-      { id: 'sec-target-omset-supplier', label: 'Target vs Omset per Supplier' },
+      { id: 'sec-perbandingan-dsr', label: 'Perbandingan Sales DSR' },
       { id: 'sec-distribusi-supplier-dsr', label: 'Distribusi Produk / Supplier DSR' },
+      { id: 'sec-ranking-dsr-supplier', label: 'Ranking DSR per Supplier' },
+      { id: 'sec-target-omset-supplier', label: 'Target vs Omset per Supplier' },
     ],
   },
   {
@@ -49,6 +49,7 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'sec-omset-harian', label: 'Grafik Omset Harian' },
       { id: 'sec-barang-terlaris', label: 'Barang Paling Banyak Diambil' },
       { id: 'sec-riwayat-pengambilan', label: 'Riwayat Pengambilan Barang' },
+      { id: 'sec-perbandingan-harian', label: 'Perbandingan Harian' },
     ],
   },
   {

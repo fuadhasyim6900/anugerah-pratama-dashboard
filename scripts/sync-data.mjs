@@ -88,21 +88,62 @@ async function insertBatched(table, rows) {
   console.log('\n  selesai.');
 }
 
+// TGL FAKTUR bisa berupa objek Date (kalau cellDates:true berhasil
+// mendeteksi format tanggal sel), serial Excel, atau string "dd/mm/yyyy".
+function toIsoDate(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  if (typeof v === 'string' && v.trim()) {
+    const m = v.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+    if (m) {
+      const [, dd, mm, yyRaw] = m;
+      const yyyy = yyRaw.length === 2 ? 2000 + Number(yyRaw) : Number(yyRaw);
+      const d = new Date(Date.UTC(yyyy, Number(mm) - 1, Number(dd)));
+      return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+    }
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+// CATATAN MIGRASI SUPABASE: sejak data sumber ganti dari kolom BULAN/TAHUN
+// terpisah menjadi TGL FAKTUR (+ kolom detail per transaksi seperti Qty,
+// Nama Barang, data pelanggan), tabel `sales` di Supabase juga perlu kolom
+// baru: tgl_faktur (date), qty (numeric), kode_pelanggan, nama_pelanggan,
+// alamat_pelanggan, nama_barang, kecamatan, rank_bayar, rank_omset (text).
+// bulan/tahun tetap disimpan (diturunkan dari tgl_faktur) supaya query lama
+// tetap jalan. Jalankan ALTER TABLE yang sesuai di Supabase sebelum sync.
 async function syncSales() {
   const raw = readSheet(SALES_XLSX);
   const rows = raw
     .map((r) => {
       const row = normalizeRow(r);
+      const iso = toIsoDate(row['TGL FAKTUR']);
+      const d = iso ? new Date(iso) : null;
       return {
+        no_faktur: String(row['NO FAKTUR'] ?? '').trim(),
         nominal: toNumber(row['NOMINAL']),
         supp: String(row['SUPP'] ?? '').trim(),
         depo: String(row['DEPO'] ?? '').trim().toUpperCase(),
-        bulan: String(row['BULAN'] ?? '').trim(),
-        tahun: row['TAHUN'] ? Number(row['TAHUN']) : 2026,
+        tgl_faktur: iso,
+        bulan: d ? String(d.getUTCMonth() + 1) : '',
+        tahun: d ? d.getUTCFullYear() : 2026,
         kd_grup: String(row['KD GRUP'] ?? '').trim(),
         sales: String(row['SALES'] ?? '').trim(),
         kota: String(row['KOTA'] ?? '').trim().toUpperCase(),
+        kecamatan: String(row['KECAMATAN'] ?? '').trim(),
         tele: String(row['TELE'] ?? '').trim(),
+        kode_pelanggan: String(row['KODE PELANGGAN'] ?? '').trim(),
+        nama_pelanggan: String(row['NAMA PELANGGAN'] ?? '').trim(),
+        alamat_pelanggan: String(row['ALAMAT PELANGGAN'] ?? '').trim(),
+        nama_barang: String(row['NAMA BARANG'] ?? '').trim(),
+        qty: toNumber(row['QTY']),
+        rank_bayar: String(row['RANK BAYAR'] ?? '').trim(),
+        rank_omset: String(row['RANK OMSET'] ?? '').trim(),
       };
     })
     .filter((r) => r.depo && r.sales);

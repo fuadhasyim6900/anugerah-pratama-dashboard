@@ -1,6 +1,8 @@
 # Dashboard Kinerja Penjualan & Active Outlet (AO) — CV Anugerah Pratama
 
-Dashboard penjualan & Active Outlet (AO) untuk seluruh depo CV Anugerah Pratama, dibangun dengan React + Vite + TypeScript + Tailwind, siap di-deploy ke Vercel.
+Dashboard penjualan & Active Outlet (AO) untuk seluruh depo CV Anugerah Pratama, dibangun dengan React + Vite + TypeScript + Tailwind.
+
+> **Status saat ini: mode LOKAL.** Dashboard membaca file Excel langsung di browser (tidak perlu Supabase/Vercel dulu). Lihat bagian "Menjalankan secara lokal" di bawah. Bagian Supabase/Vercel di README ini disimpan untuk referensi migrasi nanti (`scripts/sync-data.mjs` dan `api/data.js` sudah disiapkan mengikuti struktur data terbaru, tinggal diaktifkan kembali saat siap pindah).
 
 ## Halaman
 
@@ -8,39 +10,74 @@ Dashboard penjualan & Active Outlet (AO) untuk seluruh depo CV Anugerah Pratama,
 2. **Kinerja DSR** — peringkat penjualan DSR, rata-rata AO per DSR, breakdown per supplier untuk DSR terpilih (termasuk kontribusi omset telemarketing).
 3. **Proyeksi S2 2026** — skenario proyeksi Juli–Desember (tren historis, flat, target +5%/+10%, atau kustom -20% s/d +20%).
 4. **Review Kinerja DSR & Solusi Strategis** — analisis kelemahan & rekomendasi per DSR, dihitung otomatis dari data (bukan teks statis), sehingga selalu mengikuti data terbaru.
+5. **Realisasi Uang Masuk** — target & realisasi penagihan piutang per depo per bulan.
+6. **Omset Harian** *(baru)* — grafik omset per tanggal faktur, barchart & tabel barang paling banyak diambil (per Supplier & Qty), tabel riwayat pengambilan barang per pelanggan, dan tabel rincian perbandingan harian antar dua tahun. Lihat penjelasan di bawah.
 
-Sidebar berisi filter **Depo**, **Bulan**, dan **Tahun** yang berlaku ke semua halaman. Ada juga tombol ganti tema gelap/terang, ekspor halaman aktif ke PDF, dan ekspor laporan lengkap (4 halaman sekaligus) ke PDF.
+Sidebar berisi filter **Depo**, **Sales DSR**, **SUPP**, **Bulan**, dan **Tahun** yang berlaku ke semua halaman. Ada juga tombol ganti tema gelap/terang, ekspor halaman aktif ke PDF, dan ekspor laporan lengkap (6 halaman sekaligus) ke PDF.
+
+## Halaman baru: Omset Harian
+
+Sumber datanya sama dengan halaman lain (`public/data/DATA.xlsx`), tapi memakai kolom-kolom baru yang sekarang ada di file itu (`TGL FAKTUR`, `Qty`, `NAMA BARANG`, data pelanggan, dst). Isinya:
+
+- **Grafik Omset Harian** — total omset per tanggal faktur. Memakai filter sidebar (Depo/Sales DSR/SUPP/Bulan/Tahun) ditambah filter **Tanggal** (tanggal-dalam-bulan) yang hanya ada di halaman ini.
+- **Barang Paling Banyak Diambil** — barchart top 15 barang berdasarkan akumulasi Qty per Supplier, plus tabel lengkapnya (kolom: Supplier, Nama Barang, Akumulasi Qty). Memakai filter yang sama seperti grafik di atasnya.
+- **Riwayat Pengambilan Barang** — satu baris per kombinasi Pelanggan + Barang (Kode Pelanggan, Nama Pelanggan, Alamat, Kota, Nama Barang, Supplier, Transaksi Terakhir, Total Qty, Total Nominal, Frekuensi). Filter Depo/SUPP/Bulan/Tahun dari sidebar + kotak pencarian Nama Barang khusus di halaman ini (dipakai sebagai pengganti dropdown karena jumlah nama barang bisa sangat banyak). Diurutkan dari nominal tertinggi, dibatasi 200 baris teratas di layar supaya tetap ringan — gunakan filter untuk mempersempit kalau perlu semua baris.
+- **Tabel Rincian Perbandingan Harian** — sama seperti "Tabel Rincian Perbandingan Bulanan" di Executive Dashboard, tapi per tanggal di dalam satu bulan yang dipilih (dropdown **Bulan** tambahan di tabel ini), membandingkan dua tahun (Tahun A / Tahun B) sekaligus pertumbuhannya.
 
 ## Sumber data
 
-Data **tidak** di-hardcode dan **tidak** dibaca langsung dari file Excel oleh dashboard saat halaman dibuka. Alurnya:
+Data **tidak** di-hardcode — dashboard membaca langsung 3 file Excel ini saat halaman dibuka (di-parse di browser dengan SheetJS):
 
 ```
-public/data/DATA.xlsx               → transaksi penjualan (NOMINAL, SUPP, DEPO, BULAN, TAHUN, KD GRUP, SALES, KOTA, TELE)
+public/data/DATA.xlsx               → transaksi penjualan, satu baris per baris faktur
 public/data/DATA_TARGET_FUAD.xlsx   → target bulanan per salesman/supplier
-public/data/REALISASI UANG MASUK.xlsx → target & realisasi penagihan piutang
+public/data/REALISASI UANG MASUK.xlsx → target & realisasi penagihan piutang per depo/bulan
 ```
 
-File-file Excel di atas hanyalah **sumber lokal** yang dibaca oleh `scripts/sync-data.mjs` (jalan di komputer Anda, bukan di browser) lalu disinkronkan ke Supabase. Dashboard sendiri mengambil datanya dari Supabase lewat `/api/data` & `/api/meta` (lihat bagian "Cara data diambil" di bawah) — **bukan** dari file Excel di repo secara langsung.
+### Struktur kolom `DATA.xlsx` (terbaru)
 
-> Catatan teknis: kedua file sumber ternyata menyimpan nama kolom dengan tanda kutip & spasi tambahan (mis. `" DEPO "` bukan `DEPO`) — kemungkinan sisa dari proses export CSV→Excel. Parser di `sync-data.mjs` sudah menormalkan ini secara otomatis.
+```
+TGL FAKTUR, KODE PELANGGAN, NAMA PELANGGAN, ALAMAT PELANGGAN, NAMA BARANG,
+KOTA, NOMINAL, Qty, SUPP, DEPO, KD GRUP, SALES, RANK BAYAR, RANK OMSET,
+KECAMATAN, TELE
+```
 
-### Cara update data setiap hari
+> Kolom **BULAN** dan **TAHUN** yang dulu terpisah SEKARANG DITURUNKAN OTOMATIS dari **TGL FAKTUR** (lihat `deriveDateParts()` di `src/lib/types.ts`) — Anda tidak perlu lagi mengisi kolom Bulan/Tahun sendiri, cukup pastikan TGL FAKTUR terisi dan berformat tanggal (atau `dd/mm/yyyy` sebagai teks) di setiap baris.
 
-1. Timpa (replace) file Excel yang relevan di `public/data/` di komputer Anda dengan versi terbaru — **nama file harus tetap sama persis**.
-2. Jalankan:
-   ```bash
-   node --env-file=.env scripts/sync-data.mjs
-   ```
-3. Selesai — data langsung masuk ke Supabase, dan **dashboard otomatis mengikuti dalam ≤60 detik** (lihat bagian "Cara data diambil" di bawah untuk penjelasan mekanismenya). Tidak perlu commit/push file Excel ke GitHub, dan tidak perlu klik Refresh secara manual (meski tombol Refresh tetap ada kalau Anda ingin memastikan).
+> Catatan teknis: nama kolom dengan tanda kutip & spasi tambahan (mis. `" DEPO "` bukan `DEPO`) tetap ditangani otomatis oleh parser, sama seperti sebelumnya.
 
-> Catatan: kolom `TAHUN` pada file omset saat ini belum ada (data yang diupload baru berisi 2026). Begitu Anda menambahkan kolom `TAHUN` beserta data 2025, filter Tahun dan perbandingan YoY di halaman Proyeksi S2 akan otomatis terisi tanpa perlu ubah kode apa pun — kalau kolom `TAHUN` kosong, baris otomatis dianggap tahun 2026.
+### Cara update data setiap hari (mode lokal)
 
-## Menampilkan waktu terakhir update data
+1. Timpa (replace) `public/data/DATA.xlsx` dengan file terbaru — **nama file harus tetap sama persis**, kolom mengikuti struktur di atas.
+2. Simpan file, lalu klik tombol **Refresh** di kanan atas dashboard (atau reload browser). Karena file diambil dengan `cache: 'no-store'` + cache-busting, dashboard akan selalu membaca versi terbaru dari disk.
+3. Kalau sedang menjalankan `npm run dev`, Vite otomatis melayani file terbaru tanpa perlu restart server.
 
-Dashboard menampilkan **"Data terakhir diupdate: ..."** di kanan atas — ini adalah waktu Anda terakhir menjalankan `node scripts/sync-data.mjs` (bukan waktu browser memuat halaman, yang ditampilkan terpisah sebagai "Dimuat di browser").
+## Menjalankan secara lokal
 
-Sekali saja, buat tabel kecil ini di Supabase (**SQL Editor** → jalankan query berikut):
+```bash
+npm install
+npm run dev
+```
+
+Buka http://localhost:5173 — dashboard langsung membaca file di `public/data/` tanpa setup tambahan (tidak perlu `.env`, Supabase, atau `vercel dev`).
+
+## Build production
+
+```bash
+npm run build
+npm run preview   # untuk mengetes hasil build secara lokal
+```
+
+Build ini masih 100% statis (SPA) — bisa di-deploy ke hosting statis apa pun (Vercel, Netlify, GitHub Pages, dst) selama folder `public/data/*.xlsx` ikut ter-deploy.
+
+## Migrasi ke Supabase (langkah berikutnya)
+
+Proyek ini sebelumnya sempat memakai Supabase + endpoint `/api/data` di Vercel supaya ±262.000 baris data tidak ditarik ulang dari browser tiap sales buka dashboard (lihat riwayat di `scripts/sync-data.mjs` dan `api/data.js` — keduanya SUDAH diupdate mengikuti kolom baru `TGL FAKTUR`/`Qty`/`NAMA BARANG`/dst, tinggal diaktifkan lagi kapan pun siap):
+
+1. Buat tabel `sales` di Supabase dengan kolom: `nominal, supp, depo, tgl_faktur (date), bulan, tahun, kd_grup, sales, kota, kecamatan, tele, kode_pelanggan, nama_pelanggan, alamat_pelanggan, nama_barang, qty, rank_bayar, rank_omset` (plus tabel `targets`, `uang_masuk`, `data_meta` — lihat query lama di bawah).
+2. Set `SUPABASE_URL` dan `SUPABASE_SECRET_KEY` di `.env`, lalu jalankan `node --env-file=.env scripts/sync-data.mjs` untuk mengisi Supabase dari file Excel di `public/data/`.
+3. Ubah `src/lib/loadData.ts` supaya kembali fetch ke `/api/data` (endpoint ini sudah siap di `api/data.js`) alih-alih parse Excel langsung — cukup ganti isi 4 fungsi `load*()` di file itu, bentuk `SalesRow`/`TargetRow`/`UangMasukRow` yang dikembalikan tidak perlu diubah sama sekali karena semua halaman (termasuk Omset Harian) sudah memakai bentuk data yang sama.
+4. Deploy ke Vercel dengan `SUPABASE_URL` & `SUPABASE_ANON_KEY` di Environment Variables (lihat bagian deploy di bawah).
 
 ```sql
 create table if not exists data_meta (
@@ -53,14 +90,6 @@ alter table data_meta enable row level security;
 create policy "Allow public read" on data_meta
   for select using (true);
 ```
-
-Setelah itu, setiap kali Anda menjalankan `node scripts/sync-data.mjs`, waktu sync otomatis tercatat ke tabel ini dan langsung muncul di dashboard setelah Anda klik **Refresh**. Tidak perlu setup tambahan apa pun — kalau tabel ini belum dibuat, dashboard tetap jalan normal, hanya saja baris "Data terakhir diupdate" belum muncul.
-
-## Realisasi Uang Masuk
-
-Halaman **Realisasi Uang Masuk** menampilkan target & realisasi penagihan piutang per depo per bulan, dari file `REALISASI UANG MASUK.xlsx` (kolom `TAHUN`, `BULAN`, `DEPO`, `TARGET PIUTANG`, `REALISASI PIUTANG`), disinkronkan ke tabel `uang_masuk` di Supabase — pola yang sama seperti tabel `sales` & `targets`.
-
-Karena tabel ini **belum ada** di Supabase Anda, buat dulu (sekali saja) lewat **SQL Editor**:
 
 ```sql
 create table if not exists uang_masuk (
@@ -81,33 +110,7 @@ create policy "Allow public read" on uang_masuk
   for select using (true);
 ```
 
-(Query yang sama juga tersedia di file `supabase_uang_masuk.sql` di root proyek ini.)
-
-Setelah tabel dibuat, letakkan `REALISASI UANG MASUK.xlsx` di `public/data/` (nama file harus persis sama) lalu jalankan:
-
-```bash
-node scripts/sync-data.mjs
-```
-
-Script ini sekarang juga menyinkronkan `uang_masuk` sekaligus dengan `sales` & `targets`. Kalau tabelnya belum dibuat, sinkronisasi data ini akan gagal dengan pesan yang jelas tapi **tidak** menggagalkan sinkronisasi `sales`/`targets`. Di dashboard sendiri, sebelum tabelnya dibuat, halaman Realisasi Uang Masuk akan menampilkan pesan "Data belum tersedia" alih-alih error — halaman lain tetap berjalan normal.
-
-## Menjalankan secara lokal
-
-```bash
-npm install
-npm run dev
-```
-
-Buka http://localhost:5173
-
-## Build production
-
-```bash
-npm run build
-npm run preview   # untuk mengetes hasil build secara lokal
-```
-
-## Deploy ke Vercel
+## Deploy ke Vercel (setelah migrasi Supabase)
 
 1. Push project ini ke repository GitHub Anda.
 2. Di Vercel: **New Project** → import repo tersebut.
@@ -119,33 +122,22 @@ npm run preview   # untuk mengetes hasil build secara lokal
    - `SUPABASE_ANON_KEY`
 5. Deploy. Setelah itu, setiap `git push` ke branch utama akan otomatis membuat deployment baru.
 
-## Cara data diambil (dan kenapa lewat /api/data + /api/meta, bukan langsung dari browser)
-
-Data disimpan di Supabase (tabel `sales`, `targets`, `uang_masuk`), diisi lewat `node scripts/sync-data.mjs`. Tabel `sales` sendiri berisi ± 262.000 baris.
-
-Browser **tidak** memanggil Supabase secara langsung. Alurnya dua tahap:
-
-1. Browser memanggil `/api/meta` (`api/meta.js`) — endpoint kecil & murah yang cuma mengembalikan `syncedAt` (waktu sync terakhir). Di-cache Vercel **60 detik saja**.
-2. Browser lalu memanggil `/api/data?v=<syncedAt>` (`api/data.js`) — endpoint yang mengambil seluruh data dari Supabase. Karena URL-nya menyertakan versi (`v`), Vercel meng-cache-nya **sangat lama per versi** (data untuk versi yang sama memang tidak pernah berubah).
-
-**Kenapa dua tahap, bukan satu cache biasa:** dengan cara ini, begitu Anda menjalankan `sync-data.mjs`, `syncedAt` di Supabase berubah → dalam waktu **maksimal 60 detik**, semua browser sales otomatis mendeteksi versi baru lewat `/api/meta` → mereka memanggil `/api/data?v=<versi-baru>`, yang otomatis dianggap cache MISS oleh Vercel (karena URL-nya beda) sehingga Supabase diakses ulang **sekali** untuk versi itu, lalu hasilnya dilayani dari cache untuk semua sales lain yang membuka dashboard di versi yang sama.
-
-Hasilnya: **dashboard otomatis ter-update dalam hitungan detik/menit setelah sync**, sales tidak perlu klik Refresh, DAN Supabase tetap hanya diakses satu kali per sync (bukan sekali per kunjungan per sales) — jadi kuota egress Supabase Free (5 GB/bulan) tetap aman meski trafik ramai.
-
-> Catatan: mekanisme ini mensyaratkan tabel `data_meta` sudah dibuat (lihat bagian "Menampilkan waktu terakhir update data" di atas) dan terisi lewat `sync-data.mjs`. Kalau tabel itu belum ada, `/api/meta` akan mengembalikan versi kosong dan `/api/data` otomatis jatuh ke cache fallback pendek (5 menit) — dashboard tetap jalan normal, hanya saja deteksi sync-nya tidak seinstan itu.
-
 ## Struktur proyek
 
 ```
 src/
-  lib/            → parsing Excel (SheetJS), agregasi data, mesin analisis DSR, ekspor PDF
-  store/          → filter global (Depo/Bulan/Tahun) & tema (Zustand)
+  lib/            → parsing Excel (SheetJS), agregasi data (aggregate.ts, omsetHarian.ts), mesin analisis DSR, ekspor PDF
+  store/          → filter global (Depo/DSR/SUPP/Bulan/Tahun) & tema (Zustand)
   hooks/          → provider data (fetch & parse sekali, dipakai semua halaman)
   components/     → Sidebar, TopBar, KPI card, chart wrapper (Recharts)
-  pages/          → 4 halaman dashboard
+  pages/          → 6 halaman dashboard (termasuk OmsetHarian.tsx)
 public/
-  data/           → 2 file Excel sumber data (timpa file ini untuk update harian)
+  data/           → 3 file Excel sumber data (timpa file ini untuk update harian)
   Logo-AP_PNG.webp
+scripts/
+  sync-data.mjs   → (opsional, untuk migrasi Supabase nanti) import Excel -> Supabase
+api/
+  data.js         → (opsional, untuk migrasi Supabase nanti) endpoint Vercel yang men-cache data dari Supabase
 ```
 
 ## Font
@@ -155,5 +147,5 @@ Menggunakan **Plus Jakarta Sans** (sama seperti referensi), dimuat lewat Google 
 ## Ekspor / Cetak
 
 - **Ekspor Halaman Aktif** — merender halaman yang sedang dibuka menjadi PDF (via `html2canvas` + `jsPDF`) lalu otomatis mengunduhnya. File PDF yang terunduh bisa langsung dicetak dari PDF viewer manapun.
-- **Ekspor Laporan Lengkap** — otomatis berpindah ke keempat halaman satu per satu, menangkap tiap halaman, lalu menggabungkannya menjadi satu file PDF multi-halaman.
+- **Ekspor Laporan Lengkap** — otomatis berpindah ke keenam halaman satu per satu, menangkap tiap halaman, lalu menggabungkannya menjadi satu file PDF multi-halaman.
 

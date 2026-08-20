@@ -109,7 +109,6 @@ export async function loadSalesData(): Promise<SalesRow[]> {
       const tglFaktur = toDate(row['TGL FAKTUR']);
       const { bulan, monthNum, tahun, tanggal, tanggalStr } = deriveDateParts(tglFaktur);
       return {
-        noFaktur: String(row['NO FAKTUR'] ?? '').trim(),
         nominal: toNumber(row['NOMINAL']),
         supp: String(row['SUPP'] ?? '').trim(),
         depo: String(row['DEPO'] ?? '').trim().toUpperCase(),

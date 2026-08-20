@@ -1,5 +1,4 @@
 export interface SalesRow {
-  noFaktur: string;
   nominal: number;
   supp: string;
   depo: string;

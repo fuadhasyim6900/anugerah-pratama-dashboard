@@ -1,6 +1,6 @@
 import type { SalesRow } from './types';
 import { MONTH_NAMES_ID } from './types';
-import { sumNominal, groupSumBy, formatRupiah, dsrLabel } from './aggregate';
+import { sumNominal, groupSumBy, formatRupiah } from './aggregate';
 
 export interface DSRInsight {
   dsr: string;
@@ -25,7 +25,7 @@ function jt(v: number): string {
 }
 
 export function buildDSRInsight(allRowsForDepo: SalesRow[], dsr: string): DSRInsight {
-  const rows = allRowsForDepo.filter((r) => dsrLabel(r) === dsr);
+  const rows = allRowsForDepo.filter((r) => r.sales === dsr);
   const salesYtd = sumNominal(rows);
 
   // AO bulanan rerata

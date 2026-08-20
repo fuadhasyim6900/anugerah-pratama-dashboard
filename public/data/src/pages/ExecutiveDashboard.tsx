@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Wallet, Target, Store, Gauge, Percent, Package, Map, TrendingUp, Users2 } from 'lucide-react';
+import { Wallet, Target, Store, Gauge, Percent, Package, Map, TrendingUp, Users2, CalendarRange } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import BarChartCard from '../components/charts/BarChartCard';
@@ -13,7 +13,7 @@ import { useFilterStore } from '../store/filters';
 import {
   applyFilters, sumNominal, distinctCount, sumTarget, groupSumBy, trendByMonth,
   formatRupiah, formatNumber, safeAverage, distinctMonthsPresent,
-  depoLabel, bulanLabel, tahunLabel, aoPerSupplier, dsrRankingBySupplier,
+  pctChange, depoLabel, bulanLabel, tahunLabel, aoPerSupplier, dsrRankingBySupplier,
 } from '../lib/aggregate';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
 
@@ -21,11 +21,11 @@ const EXEC_TABS = [
   { id: 'wilayah', label: 'Distribusi Wilayah', icon: <Map size={14} />, sectionIds: ['sec-omset-per-kota', 'sec-omset-per-depo'] },
   { id: 'target', label: 'Target vs Realisasi', icon: <TrendingUp size={14} />, sectionIds: ['sec-target-vs-realisasi'] },
   { id: 'supplier', label: 'AO Supplier', icon: <Users2 size={14} />, sectionIds: ['sec-ao-persupplier'] },
+  { id: 'bulanan', label: 'Perbandingan Bulanan', icon: <CalendarRange size={14} />, sectionIds: ['sec-perbandingan-bulanan'] },
 ];
 
 export default function ExecutiveDashboard() {
   const { sales, targets, loading, error } = useSalesData();
-  const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
   const filters = useFilterStore();
 
   const filtered = useMemo(() => applyFilters(sales, filters), [sales, filters]);
@@ -94,6 +94,72 @@ export default function ExecutiveDashboard() {
     });
   }, [sales, targets, filters]);
 
+  // Separate two-year picker for the monthly comparison table below
+  const availableYears = useMemo(() => Array.from(new Set(sales.map((r) => r.tahun))).sort(), [sales]);
+  const [tahunA, setTahunA] = useState<number | null>(null);
+  const [tahunB, setTahunB] = useState<number | null>(null);
+  useEffect(() => {
+    if (availableYears.length >= 2 && (tahunA === null || tahunB === null)) {
+      setTahunA(availableYears[availableYears.length - 2]);
+      setTahunB(availableYears[availableYears.length - 1]);
+    } else if (availableYears.length === 1 && tahunB === null) {
+      setTahunA(availableYears[0]);
+      setTahunB(availableYears[0]);
+    }
+  }, [availableYears, tahunA, tahunB]);
+
+  // The main Bulan filter restricts which months this table shows (empty = all 12).
+  const monthsToShow = useMemo(
+    () => (filters.bulan.length ? [...filters.bulan].sort((a, b) => a - b) : Array.from({ length: 12 }, (_, i) => i + 1)),
+    [filters.bulan]
+  );
+
+  const monthlyComparison = useMemo(() => {
+    if (tahunA === null || tahunB === null) return { rows: [], grandTotal: null as null | {
+      salesA: number; salesB: number; salesGrowth: number | null;
+      aoA: number; aoB: number; aoGrowth: number | null;
+    } };
+    const rowsA = applyFilters(sales, { depo: filters.depo, supp: filters.supp, bulan: [], tahun: [tahunA] });
+    const rowsB = applyFilters(sales, { depo: filters.depo, supp: filters.supp, bulan: [], tahun: [tahunB] });
+    const rows = monthsToShow.map((monthNum) => {
+      const label = MONTH_NAMES_ID[monthNum - 1];
+      const aRows = rowsA.filter((r) => r.monthNum === monthNum);
+      const bRows = rowsB.filter((r) => r.monthNum === monthNum);
+      const salesA = sumNominal(aRows);
+      const salesB = sumNominal(bRows);
+      const aoA = distinctCount(aRows, 'kdGrup');
+      const aoB = distinctCount(bRows, 'kdGrup');
+      return {
+        bulan: label,
+        salesA, salesB,
+        salesGrowth: pctChange(salesB, salesA),
+        aoA, aoB,
+        aoGrowth: pctChange(aoB, aoA),
+      };
+    });
+
+    // Grand total only covers the months currently shown (respecting the
+    // Bulan filter), and AO is a distinct count across that scope rather
+    // than a sum of monthly AO (which would double-count outlets active in
+    // more than one month).
+    const rowsAInScope = rowsA.filter((r) => monthsToShow.includes(r.monthNum));
+    const rowsBInScope = rowsB.filter((r) => monthsToShow.includes(r.monthNum));
+    const grandSalesA = sumNominal(rowsAInScope);
+    const grandSalesB = sumNominal(rowsBInScope);
+    const grandAoA = distinctCount(rowsAInScope, 'kdGrup');
+    const grandAoB = distinctCount(rowsBInScope, 'kdGrup');
+
+    return {
+      rows,
+      grandTotal: {
+        salesA: grandSalesA, salesB: grandSalesB,
+        salesGrowth: pctChange(grandSalesB, grandSalesA),
+        aoA: grandAoA, aoB: grandAoB,
+        aoGrowth: pctChange(grandAoB, grandAoA),
+      },
+    };
+  }, [sales, filters.depo, filters.supp, monthsToShow, tahunA, tahunB]);
+
   // --- Tabel AO Persupplier --------------------------------------------
   // Bulan & Tahun here are bound directly to the main sidebar filter store,
   // so changing them here also updates the sidebar (and every other card on
@@ -116,6 +182,7 @@ export default function ExecutiveDashboard() {
   const targetVsRealisasiRef = useRef<HTMLDivElement>(null);
   const omsetPerKotaRef = useRef<HTMLDivElement>(null);
   const omsetPerDepoRef = useRef<HTMLDivElement>(null);
+  const perbandinganBulananRef = useRef<HTMLDivElement>(null);
   const aoSupplierRef = useRef<HTMLDivElement>(null);
 
   // --- Drill-down modals (click a bar/row to "mengerucutkan" ke satu item) --
@@ -150,6 +217,16 @@ export default function ExecutiveDashboard() {
     const rows = filtered.filter((r) => r.supp === suppDetail);
     return dsrRankingBySupplier(rows).rows.slice(0, 8);
   }, [suppDetail, filtered]);
+
+  const [monthDetail, setMonthDetail] = useState<{ bulan: string; monthNum: number } | null>(null);
+  const monthDetailData = useMemo(() => {
+    if (!monthDetail || tahunA === null || tahunB === null) return null;
+    const rowsA = sales.filter((r) => r.monthNum === monthDetail.monthNum && r.tahun === tahunA
+      && (!filters.depo.length || filters.depo.includes(r.depo)) && (!filters.supp.length || filters.supp.includes(r.supp)));
+    const rowsB = sales.filter((r) => r.monthNum === monthDetail.monthNum && r.tahun === tahunB
+      && (!filters.depo.length || filters.depo.includes(r.depo)) && (!filters.supp.length || filters.supp.includes(r.supp)));
+    return { byDepoA: groupSumBy(rowsA, 'depo'), byDepoB: groupSumBy(rowsB, 'depo') };
+  }, [monthDetail, sales, tahunA, tahunB, filters.depo, filters.supp]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -338,6 +415,102 @@ export default function ExecutiveDashboard() {
         </div>
         </TabPanel>
 
+        <TabPanel id="bulanan">
+        <div id="sec-perbandingan-bulanan" className="card p-5 scroll-mt-28" ref={perbandinganBulananRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
+            <div>
+              <h3 className="font-bold text-sm">Tabel Rincian Perbandingan Bulanan</h3>
+              <p className="text-xs text-ink-400">
+                Perbandingan penjualan & AO antar dua tahun, per bulan{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''} · {bulanLabel(filters.bulan)}{filters.supp.length ? ` · ${filters.supp.join(', ')}` : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-semibold">
+                Tahun A
+                <select
+                  value={tahunA ?? ''}
+                  onChange={(e) => setTahunA(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold">
+                Tahun B
+                <select
+                  value={tahunB ?? ''}
+                  onChange={(e) => setTahunB(Number(e.target.value))}
+                  className="rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5"
+                >
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+              <ExportMenu targetRef={perbandinganBulananRef} filename="rincian-perbandingan-bulanan" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                  <th className="py-2 pr-3">Bulan</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {tahunA ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Penjualan Tahun {tahunB ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan Sales (%)</th>
+                  <th className="py-2 pr-3 text-right">AO {tahunA ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">AO {tahunB ?? '-'}</th>
+                  <th className="py-2 pr-3 text-right">Pertumbuhan AO (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyComparison.rows.map((m) => (
+                  <tr
+                    key={m.bulan}
+                    onClick={() => setMonthDetail({ bulan: m.bulan, monthNum: MONTH_NAMES_ID.indexOf(m.bulan) + 1 })}
+                    className="border-b border-ink-50 dark:border-ink-800/60 cursor-pointer hover:bg-ink-50 dark:hover:bg-ink-800/60"
+                  >
+                    <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatRupiah(m.salesB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.salesGrowth === null ? 'text-ink-400' : m.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.salesGrowth === null ? '-' : `${m.salesGrowth >= 0 ? '+' : ''}${m.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoA)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(m.aoB)}</td>
+                    <td className={`py-2 pr-3 text-right font-semibold ${m.aoGrowth === null ? 'text-ink-400' : m.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {m.aoGrowth === null ? '-' : `${m.aoGrowth >= 0 ? '+' : ''}${m.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+                {monthlyComparison.grandTotal && (
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                    <td className="py-2.5 pr-3">Grand Total</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(monthlyComparison.grandTotal.salesA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatRupiah(monthlyComparison.grandTotal.salesB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${monthlyComparison.grandTotal.salesGrowth === null ? 'text-ink-400' : monthlyComparison.grandTotal.salesGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {monthlyComparison.grandTotal.salesGrowth === null ? '-' : `${monthlyComparison.grandTotal.salesGrowth >= 0 ? '+' : ''}${monthlyComparison.grandTotal.salesGrowth.toFixed(1)}%`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(monthlyComparison.grandTotal.aoA)}</td>
+                    <td className="py-2.5 pr-3 text-right">{formatNumber(monthlyComparison.grandTotal.aoB)}</td>
+                    <td className={`py-2.5 pr-3 text-right ${monthlyComparison.grandTotal.aoGrowth === null ? 'text-ink-400' : monthlyComparison.grandTotal.aoGrowth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                      {monthlyComparison.grandTotal.aoGrowth === null ? '-' : `${monthlyComparison.grandTotal.aoGrowth >= 0 ? '+' : ''}${monthlyComparison.grandTotal.aoGrowth.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </TabPanel>
         </Tabs>
 
       </div>
@@ -442,6 +615,31 @@ export default function ExecutiveDashboard() {
               </div>
             ))}
             {suppDetailData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data untuk supplier ini</p>}
+          </div>
+        )}
+      </DetailModal>
+
+      <DetailModal
+        open={!!monthDetail}
+        onClose={() => setMonthDetail(null)}
+        title={`Rincian Bulan: ${monthDetail?.bulan ?? ''}`}
+        subtitle={`Perbandingan omset per depo, Tahun ${tahunA ?? '-'} vs ${tahunB ?? '-'}`}
+      >
+        {monthDetailData && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-ink-400 font-bold uppercase pb-1 border-b border-ink-100 dark:border-ink-800">
+              <span>Depo</span>
+              <span className="flex gap-4"><span>Tahun {tahunA}</span><span>Tahun {tahunB}</span></span>
+            </div>
+            {Array.from(new Set([...monthDetailData.byDepoA.map((d) => d.label), ...monthDetailData.byDepoB.map((d) => d.label)])).map((depo) => (
+              <div key={depo} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
+                <span className="font-medium">{depo}</span>
+                <span className="flex gap-4">
+                  <span className="w-28 text-right">{formatRupiah(monthDetailData.byDepoA.find((d) => d.label === depo)?.value || 0)}</span>
+                  <span className="w-28 text-right font-semibold">{formatRupiah(monthDetailData.byDepoB.find((d) => d.label === depo)?.value || 0)}</span>
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </DetailModal>

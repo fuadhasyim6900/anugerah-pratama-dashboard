@@ -4,7 +4,6 @@ import { useThemeStore } from '../store/theme';
 import { useUIStore } from '../store/ui';
 import { useSalesData } from '../hooks/useSalesData';
 import { exportActivePageToPdf, exportFullReportToPdf } from '../lib/exportPdf';
-import FilterPopover from './FilterPopover';
 
 export default function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
   const { dark, toggle } = useThemeStore();
@@ -56,8 +55,6 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <FilterPopover />
-
         <button
           onClick={() => reload()}
           disabled={loading}
