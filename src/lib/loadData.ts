@@ -87,7 +87,13 @@ async function fetchMeta(): Promise<string | null> {
 async function fetchPayload(): Promise<ApiPayload> {
   const syncedAt = await fetchMeta();
   const v = syncedAt ?? 'v0';
-  const res = await fetch(`/api/data?v=${encodeURIComponent(v)}`, { cache: 'no-store' });
+  // TIDAK pakai { cache: 'no-store' } di sini (beda dengan /api/meta di
+  // atas) -- payload ini besar (~2,4MB gzip), jadi kita SENGAJA izinkan
+  // browser pakai HTTP cache-nya sendiri (lihat header max-age yang diset
+  // di api/data.js). Aman: URL-nya sudah menyertakan versi (`?v=`), jadi
+  // begitu ada sync baru, otomatis jadi URL baru yang tidak match cache
+  // lama manapun -- browser tidak akan pernah menyajikan data basi.
+  const res = await fetch(`/api/data?v=${encodeURIComponent(v)}`);
   if (!res.ok) {
     let detail = '';
     try {

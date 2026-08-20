@@ -200,6 +200,18 @@ export default async function handler(req, res) {
     // tidak perlu perubahan apa pun di kode frontend.
     const compressed = zlib.gzipSync(payload);
 
+    // max-age: berapa lama BROWSER pengunjung sendiri boleh pakai
+    // salinannya sendiri dari disk cache, TANPA menyentuh jaringan sama
+    // sekali (bukan cuma tidak menghubungi Supabase -- bahkan tidak
+    // menghubungi Vercel). Ini yang sebelumnya hilang: cuma s-maxage yang
+    // diset, dan s-maxage HANYA dipatuhi shared cache (CDN) seperti
+    // Vercel, BUKAN oleh browser. Tanpa max-age, browser selalu mengunduh
+    // ulang seluruh payload (~2,4MB gzip / ~44MB setelah didekompres)
+    // setiap kali halaman di-reload, walau CDN Vercel-nya sendiri sudah
+    // HIT -- itulah yang bikin reload tetap terasa lama.
+    // Aman dipakai karena URL-nya sudah ber-versi lewat query string `v`
+    // (lihat src/lib/loadData.ts): begitu ada sync baru, `v` berubah,
+    // otomatis jadi URL baru yang tidak match cache lama manapun.
     // s-maxage: berapa lama Vercel CDN boleh menyajikan hasil ini dari cache
     // tanpa menghubungi Supabase lagi.
     // stale-while-revalidate: kalau ada request PAS SAAT cache baru basi,
@@ -208,7 +220,7 @@ export default async function handler(req, res) {
     // berikutnya.
     res.setHeader(
       'Cache-Control',
-      `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=30`
+      `public, max-age=${CACHE_SECONDS}, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=30`
     );
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Encoding', 'gzip');
