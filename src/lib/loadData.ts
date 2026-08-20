@@ -1,177 +1,201 @@
-import * as XLSX from 'xlsx';
 import type { SalesRow, TargetRow, UangMasukRow } from './types';
 import { deriveDateParts, normalizeBulanToMonthNum } from './types';
 
 // ---------------------------------------------------------------------------
-// MODE LOKAL: file Excel dibaca & di-parse LANGSUNG di browser (via SheetJS),
-// dari folder public/data/ — persis seperti versi awal proyek ini sebelum
-// dipindah ke Supabase. Ini dipakai dulu supaya bisa langsung dijalankan
-// `npm run dev` tanpa perlu setup Supabase/Vercel.
+// MODE SUPABASE (lewat endpoint /api): dashboard TIDAK memanggil Supabase
+// langsung dari browser. Sebagai gantinya:
 //
-// Ketika nanti dipindah ke Supabase: cukup update `scripts/sync-data.mjs` &
-// `api/data.js` (sudah disiapkan mengikuti kolom baru TGL FAKTUR di file
-// ini juga) lalu ganti isi loadSalesData/loadTargetData/loadUangMasukData di
-// bawah supaya fetch ke /api/data seperti versi sebelumnya. Bentuk
-// SalesRow/TargetRow/UangMasukRow yang dikembalikan sengaja dibuat sama
-// persis supaya halaman-halaman lain tidak perlu diubah sama sekali.
+//   1. GET /api/meta  -> { syncedAt }  (query super ringan, cache 60 detik)
+//   2. GET /api/data?v=<syncedAt>  -> seluruh data (sales/targets/uangMasuk),
+//      di-gzip oleh server, di-cache di CDN Vercel selama 4 jam per versi.
+//
+// Kenapa dua langkah? Supaya CDN Vercel bisa cache /api/data selama
+// berjam-jam (murah, cepat), TAPI begitu Anda menjalankan
+// `node --env-file=.env scripts/sync-data.mjs` dan syncedAt berubah,
+// dashboard otomatis tahu ada versi baru (lewat /api/meta yang cache-nya
+// cuma 60 detik) dan mengambil ulang /api/data dengan query string `v` yang
+// baru -> cache lama otomatis dilewati, data terbaru langsung didapat.
+//
+// Lihat api/meta.js dan api/data.js untuk detail server-side-nya.
+//
+// PENTING untuk development lokal: route /api/* ini adalah Vercel Serverless
+// Functions, TIDAK jalan dengan `npm run dev` (Vite) biasa. Untuk mengetesnya
+// secara lokal, jalankan `vercel dev` (butuh `.env` berisi SUPABASE_URL &
+// SUPABASE_ANON_KEY, dan login `vercel login` sekali). Kalau cuma `npm run
+// dev`, fetch ke /api/meta & /api/data akan gagal (404) karena Vite tidak
+// tahu cara menjalankan fungsi serverless ini.
 
-const SALES_URL = '/data/DATA.xlsx';
-const TARGET_URL = '/data/DATA_TARGET_FUAD.xlsx';
-const UANG_MASUK_URL = '/data/REALISASI UANG MASUK.xlsx';
-
-function normalizeKey(k: string): string {
-  return k.replace(/^["'\s]+|["'\s]+$/g, '').trim().toUpperCase();
+interface ApiPayload {
+  sales: RawSalesRow[];
+  targets: RawTargetRow[];
+  uangMasuk: RawUangMasukRow[];
+  syncedAt: string | null;
 }
 
-function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) out[normalizeKey(k)] = v;
-  return out;
+interface RawSalesRow {
+  no_faktur: string;
+  nominal: number;
+  supp: string;
+  depo: string;
+  tgl_faktur: string | null; // "yyyy-mm-dd"
+  kd_grup: string;
+  sales: string;
+  kota: string;
+  kecamatan: string;
+  tele: string;
+  kode_pelanggan: string;
+  nama_pelanggan: string;
+  alamat_pelanggan: string;
+  nama_barang: string;
+  qty: number;
+  rank_bayar: string;
+  rank_omset: string;
 }
 
-function toNumber(v: unknown): number {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string') {
-    const cleaned = v.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(cleaned);
-    return isNaN(n) ? 0 : n;
+interface RawTargetRow {
+  nama_salesman: string;
+  depo: string;
+  supplier: string;
+  tahun: number;
+  monthly: number[];
+}
+
+interface RawUangMasukRow {
+  tahun: number;
+  bulan: string;
+  depo: string;
+  target_piutang: number;
+  realisasi_piutang: number;
+}
+
+// Cache di memori: seluruh payload cuma diambil SEKALI per sesi (sampai
+// tombol Refresh menekan resetDataCache()), lalu dipakai bareng oleh
+// loadSalesData/loadTargetData/loadUangMasukData/loadDataSyncedAt.
+let payloadPromise: Promise<ApiPayload> | null = null;
+
+async function fetchMeta(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/meta', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { syncedAt: string | null };
+    return json.syncedAt ?? null;
+  } catch {
+    return null;
   }
-  return 0;
 }
 
-// Excel bisa menyimpan tanggal sebagai: objek Date (kalau file dibaca dengan
-// cellDates:true dan sel diformat sebagai tanggal), angka serial Excel, atau
-// string ("04/01/2021", "2021-01-04", dst). Tangani ketiganya.
-function toDate(v: unknown): Date | null {
-  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
-  if (typeof v === 'number') {
-    // Serial date Excel: hari sejak 1899-12-30.
-    const ms = Math.round((v - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  if (typeof v === 'string') {
-    const s = v.trim();
-    if (!s) return null;
-    // Coba format "dd/mm/yyyy" atau "dd-mm-yyyy" dulu (umum di export lokal).
-    const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-    if (m) {
-      const [, dd, mm, yyRaw] = m;
-      const yyyy = yyRaw.length === 2 ? 2000 + Number(yyRaw) : Number(yyRaw);
-      const d = new Date(yyyy, Number(mm) - 1, Number(dd));
-      return isNaN(d.getTime()) ? null : d;
+async function fetchPayload(): Promise<ApiPayload> {
+  const syncedAt = await fetchMeta();
+  const v = syncedAt ?? 'v0';
+  const res = await fetch(`/api/data?v=${encodeURIComponent(v)}`, { cache: 'no-store' });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = (await res.json()) as { error?: string };
+      detail = body.error ? ` - ${body.error}` : '';
+    } catch {
+      /* respons bukan JSON, abaikan */
     }
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
+    throw new Error(`Gagal memuat /api/data (status ${res.status})${detail}`);
   }
-  return null;
+  return (await res.json()) as ApiPayload;
 }
 
-interface FetchedWorkbook {
-  rows: Record<string, unknown>[];
-  lastModified: Date | null;
-}
-
-const fileCache = new Map<string, Promise<FetchedWorkbook>>();
-
-async function fetchSheet(url: string): Promise<FetchedWorkbook> {
-  if (!fileCache.has(url)) {
-    const promise = (async (): Promise<FetchedWorkbook> => {
-      // cache: 'no-store' + query cache-buster supaya selalu ambil file
-      // terbaru dari disk, bukan versi lama yang ter-cache browser.
-      const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`Gagal memuat ${url} (status ${res.status})`);
-      const lastModifiedHeader = res.headers.get('last-modified');
-      const buf = await res.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-      return { rows, lastModified: lastModifiedHeader ? new Date(lastModifiedHeader) : null };
-    })().catch((err) => {
-      fileCache.delete(url);
+function getPayload(): Promise<ApiPayload> {
+  if (!payloadPromise) {
+    payloadPromise = fetchPayload().catch((err) => {
+      payloadPromise = null;
       throw err;
     });
-    fileCache.set(url, promise);
   }
-  return fileCache.get(url)!;
+  return payloadPromise;
 }
 
-/** Dipanggil oleh tombol Refresh supaya percobaan berikutnya mengambil ulang file dari disk. */
+/** Dipanggil oleh tombol Refresh supaya percobaan berikutnya mengambil ulang data dari /api. */
 export function resetDataCache() {
-  fileCache.clear();
+  payloadPromise = null;
+}
+
+function parseIsoDate(v: string | null): Date | null {
+  if (!v) return null;
+  // "yyyy-mm-dd" -> Date lokal (hindari geser hari akibat timezone UTC).
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) {
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const [, yyyy, mm, dd] = m;
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  return isNaN(d.getTime()) ? null : d;
 }
 
 export async function loadSalesData(): Promise<SalesRow[]> {
-  const { rows: raw } = await fetchSheet(SALES_URL);
+  const { sales: raw } = await getPayload();
   return raw
-    .map((r): SalesRow => {
-      const row = normalizeRow(r);
-      const tglFaktur = toDate(row['TGL FAKTUR']);
+    .map((row): SalesRow => {
+      const tglFaktur = parseIsoDate(row.tgl_faktur);
       const { bulan, monthNum, tahun, tanggal, tanggalStr } = deriveDateParts(tglFaktur);
       return {
-        noFaktur: String(row['NO FAKTUR'] ?? '').trim(),
-        nominal: toNumber(row['NOMINAL']),
-        supp: String(row['SUPP'] ?? '').trim(),
-        depo: String(row['DEPO'] ?? '').trim().toUpperCase(),
+        noFaktur: row.no_faktur ?? '',
+        nominal: row.nominal ?? 0,
+        supp: row.supp ?? '',
+        depo: (row.depo ?? '').toUpperCase(),
         tglFaktur,
         tanggalStr,
         tanggal,
         bulan,
         monthNum,
         tahun,
-        kdGrup: String(row['KD GRUP'] ?? '').trim(),
-        sales: String(row['SALES'] ?? '').trim(),
-        kota: String(row['KOTA'] ?? '').trim().toUpperCase(),
-        kecamatan: String(row['KECAMATAN'] ?? '').trim(),
-        tele: String(row['TELE'] ?? '').trim(),
-        kodePelanggan: String(row['KODE PELANGGAN'] ?? '').trim(),
-        namaPelanggan: String(row['NAMA PELANGGAN'] ?? '').trim(),
-        alamatPelanggan: String(row['ALAMAT PELANGGAN'] ?? '').trim(),
-        namaBarang: String(row['NAMA BARANG'] ?? '').trim(),
-        qty: toNumber(row['QTY']),
-        rankBayar: String(row['RANK BAYAR'] ?? '').trim(),
-        rankOmset: String(row['RANK OMSET'] ?? '').trim(),
+        kdGrup: row.kd_grup ?? '',
+        sales: row.sales ?? '',
+        kota: (row.kota ?? '').toUpperCase(),
+        kecamatan: row.kecamatan ?? '',
+        tele: row.tele ?? '',
+        kodePelanggan: row.kode_pelanggan ?? '',
+        namaPelanggan: row.nama_pelanggan ?? '',
+        alamatPelanggan: row.alamat_pelanggan ?? '',
+        namaBarang: row.nama_barang ?? '',
+        qty: row.qty ?? 0,
+        rankBayar: row.rank_bayar ?? '',
+        rankOmset: row.rank_omset ?? '',
       };
     })
     .filter((r) => r.depo && r.sales);
 }
 
 export async function loadDataSyncedAt(): Promise<Date | null> {
-  const { lastModified } = await fetchSheet(SALES_URL);
-  return lastModified;
+  const { syncedAt } = await getPayload();
+  if (!syncedAt) return null;
+  const d = new Date(syncedAt);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 export async function loadUangMasukData(): Promise<UangMasukRow[]> {
-  const { rows: raw } = await fetchSheet(UANG_MASUK_URL);
+  const { uangMasuk: raw } = await getPayload();
   return raw
-    .map((r): UangMasukRow => {
-      const row = normalizeRow(r);
-      const bulanRaw = String(row['BULAN'] ?? '').trim();
+    .map((row): UangMasukRow => {
+      const bulanRaw = (row.bulan ?? '').trim();
       return {
-        tahun: row['TAHUN'] ? Number(row['TAHUN']) : new Date().getFullYear(),
+        tahun: row.tahun ?? new Date().getFullYear(),
         bulan: bulanRaw,
         monthNum: normalizeBulanToMonthNum(bulanRaw),
-        depo: String(row['DEPO'] ?? '').trim().toUpperCase(),
-        targetPiutang: toNumber(row['TARGET PIUTANG']),
-        realisasiPiutang: toNumber(row['REALISASI PIUTANG']),
+        depo: (row.depo ?? '').toUpperCase(),
+        targetPiutang: row.target_piutang ?? 0,
+        realisasiPiutang: row.realisasi_piutang ?? 0,
       };
     })
     .filter((r) => r.depo);
 }
 
 export async function loadTargetData(): Promise<TargetRow[]> {
-  const { rows: raw } = await fetchSheet(TARGET_URL);
-  const monthCols = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const { targets: raw } = await getPayload();
   return raw
-    .map((r): TargetRow => {
-      const row = normalizeRow(r);
-      return {
-        namaSalesman: String(row['NAMA SALESMAN'] ?? '').trim(),
-        depo: String(row['DEPO'] ?? '').trim().toUpperCase(),
-        supplier: String(row['SUPPLIER'] ?? '').trim().toUpperCase(),
-        tahun: row['TAHUN'] ? Number(row['TAHUN']) : new Date().getFullYear(),
-        monthly: monthCols.map((c) => toNumber(row[c])),
-      };
-    })
+    .map((row): TargetRow => ({
+      namaSalesman: row.nama_salesman ?? '',
+      depo: (row.depo ?? '').toUpperCase(),
+      supplier: (row.supplier ?? '').toUpperCase(),
+      tahun: row.tahun ?? new Date().getFullYear(),
+      monthly: Array.isArray(row.monthly) ? row.monthly.map((n) => n ?? 0) : new Array(12).fill(0),
+    }))
     .filter((r) => r.namaSalesman);
 }

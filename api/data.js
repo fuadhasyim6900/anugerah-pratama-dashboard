@@ -15,10 +15,14 @@ import zlib from 'node:zlib';
 
 const PAGE_SIZE = 1000;
 
-// Cache 4 jam. Sesuaikan kalau jadwal update data harian Anda beda -
-// misal kalau cuma sync 1x/hari, angka ini bisa dinaikkan (mis. 21600 = 6 jam
-// atau 43200 = 12 jam) supaya makin jarang Supabase diakses.
-const CACHE_SECONDS = 14400;
+// Cache 60 detik. Artinya: paling lama 1 menit setelah Anda menjalankan
+// `node --env-file=.env scripts/sync-data.mjs`, semua sales yang buka
+// dashboard otomatis melihat data terbaru (tanpa perlu redeploy Vercel).
+// Trade-off: Supabase bisa diakses lebih sering dibanding sebelumnya
+// (maksimal 1x per 60 detik per wilayah Vercel CDN, bukan per pengunjung -
+// tetap jauh lebih hemat daripada tanpa cache sama sekali). Kalau nanti
+// kuota Supabase jadi masalah, angka ini bisa dinaikkan lagi.
+const CACHE_SECONDS = 60;
 
 async function fetchAllRows(supabase, table, columns) {
   const { count, error: countError } = await supabase
@@ -101,7 +105,7 @@ export default async function handler(req, res) {
     // berikutnya.
     res.setHeader(
       'Cache-Control',
-      `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=3600`
+      `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=30`
     );
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Encoding', 'gzip');
