@@ -23,3 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# File data Excel: sekarang dashboard baca dari Supabase (via /api/data),
+# jadi file-file ini TIDAK perlu ikut di-deploy/di-push ke GitHub lagi.
+# Cukup dipakai lokal untuk `node scripts/sync-data.mjs`.
+/public/data/*.xlsx
+/public/data/~$*.xlsx
+
+# Jaga-jaga kalau folder project ter-copy nyasar ke public/data lagi
+# (pernah kejadian sebelumnya).
+/public/data/src/
+/public/data/public/
