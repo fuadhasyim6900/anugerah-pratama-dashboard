@@ -198,9 +198,11 @@ export default function OmsetHarian() {
   const [itemDetail, setItemDetail] = useState<{ namaBarang: string; supp: string } | null>(null);
   const itemDetailData = useMemo(() => {
     if (!itemDetail) return null;
+    // Semua pelanggan ditampilkan (tidak dipotong 12) — daftar panjang
+    // tinggal digulir di dalam popup (lihat DetailModal).
     return historyAll
       .filter((r) => r.namaBarang === itemDetail.namaBarang && r.supp === itemDetail.supp)
-      .slice(0, 12);
+      .sort((a, b) => b.totalNominal - a.totalNominal);
   }, [itemDetail, historyAll]);
 
   if (loading) return <LoadingState />;
