@@ -58,6 +58,24 @@ export default function Sidebar() {
         </button>
       )}
 
+      {/* Desktop-only "sembunyikan sidebar" toggle, shown while the sidebar
+          is visible. Also fixed to the viewport (same as the counterpart
+          above) rather than living inside the sidebar's own sticky header —
+          a merely-sticky button can end up hidden depending on how the
+          sidebar's internal nav-list scroll and the page's own scroll
+          interact on long pages. Being fixed guarantees it's always
+          reachable regardless of scroll position on either. */}
+      {!sidebarCollapsed && (
+        <button
+          onClick={toggleSidebarCollapsed}
+          title="Sembunyikan sidebar"
+          aria-label="Sembunyikan sidebar"
+          className="no-print hidden md:flex fixed top-4 left-[236px] z-40 items-center justify-center h-9 w-9 rounded-lg text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800"
+        >
+          <PanelLeftClose size={16} />
+        </button>
+      )}
+
       <aside
         className={clsx(
           'no-print w-72 shrink-0 flex flex-col bg-white dark:bg-ink-900 border-r border-ink-100 dark:border-ink-800',
@@ -81,19 +99,6 @@ export default function Sidebar() {
             aria-label="Tutup menu"
           >
             <X size={18} />
-          </button>
-          {/* Desktop-only "sembunyikan sidebar" toggle, kept inside this
-              inner header (which has its own reliable sticky container —
-              this <aside> scrolls itself via overflow-y-auto) instead of
-              inside the page's TopBar, whose sticky behaviour isn't
-              consistent across pages with different subtitle heights. */}
-          <button
-            onClick={toggleSidebarCollapsed}
-            title="Sembunyikan sidebar"
-            className="ml-auto hidden md:flex items-center justify-center h-8 w-8 rounded-lg text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800 shrink-0"
-            aria-label="Sembunyikan sidebar"
-          >
-            <PanelLeftClose size={18} />
           </button>
         </div>
 
