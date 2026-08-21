@@ -189,7 +189,9 @@ export default function OmsetHarian() {
     return {
       nominal: point.nominal,
       ao: point.ao,
-      topItems: itemsBySupplierQty(rows).slice(0, 8),
+      // Semua barang di tanggal ini ditampilkan (tidak dipotong) — daftar
+      // panjang tinggal digulir di dalam popup (lihat DetailModal).
+      topItems: itemsBySupplierQty(rows),
     };
   }, [dateDetail, trend, filtered]);
 
@@ -226,6 +228,9 @@ export default function OmsetHarian() {
               <h3 className="font-bold text-sm">Grafik Omset Harian</h3>
               <p className="text-xs text-ink-400">
                 Total omset per tanggal faktur{filters.depo.length ? ` · ${depoLabel(filters.depo)}` : ''}{filters.supp.length ? ` · ${filters.supp.join(', ')}` : ''}{filters.dsr && filters.dsr.length ? ` · ${filters.dsr.join(', ')}` : ''} · {bulanLabel(filters.bulan)} · {tahunLabel(filters.tahun)}
+              </p>
+              <p className="text-xs font-bold text-brand-600 whitespace-nowrap mt-1">
+                Total Omset: {formatRupiah(totalOmset)}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">

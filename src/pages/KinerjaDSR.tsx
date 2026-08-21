@@ -351,7 +351,8 @@ export default function KinerjaDSR() {
   const targetSuppDetailData = useMemo(() => {
     if (!targetSuppDetail) return null;
     const rows = filtered.filter((r) => r.supp === targetSuppDetail);
-    return dsrRankingBySupplier(rows).rows.slice(0, 8);
+    // Ranking penuh (tidak dipotong 8) — bisa digulir di dalam popup.
+    return dsrRankingBySupplier(rows).rows;
   }, [targetSuppDetail, filtered]);
 
   if (loading) return <LoadingState />;

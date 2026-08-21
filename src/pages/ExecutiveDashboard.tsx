@@ -148,7 +148,8 @@ export default function ExecutiveDashboard() {
   const suppDetailData = useMemo(() => {
     if (!suppDetail) return null;
     const rows = filtered.filter((r) => r.supp === suppDetail);
-    return dsrRankingBySupplier(rows).rows.slice(0, 8);
+    // Ranking penuh (tidak dipotong 8) — bisa digulir di dalam popup.
+    return dsrRankingBySupplier(rows).rows;
   }, [suppDetail, filtered]);
 
   if (loading) return <LoadingState />;

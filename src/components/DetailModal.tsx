@@ -33,17 +33,22 @@ export default function DetailModal({
 
   return createPortal(
     <div
-      className="no-print fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-3 sm:p-6 bg-black/50 overflow-y-auto"
+      className="no-print fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-3 sm:p-6 bg-black/50"
       onClick={onClose}
     >
+      {/* Header is kept outside the scroll area (shrink-0) so it — and the
+          close button — always stay visible, while everything below (which
+          can grow long, e.g. full item/ranking lists) scrolls independently
+          inside its own max-height area. This applies to every popup that
+          uses DetailModal. */}
       <div
-        className="card w-full max-w-2xl p-5 my-6 sm:my-0 max-h-[85vh] overflow-y-auto"
+        className="card w-full max-w-2xl my-6 sm:my-0 max-h-[85vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start justify-between gap-4 p-5 pb-4 border-b border-ink-100 dark:border-ink-800 shrink-0">
           <div className="min-w-0">
             <h3 className="font-bold text-sm">{title}</h3>
             {subtitle && <p className="text-xs text-ink-400 mt-0.5">{subtitle}</p>}
@@ -56,7 +61,9 @@ export default function DetailModal({
             <X size={16} />
           </button>
         </div>
-        {children}
+        <div className="p-5 pt-4 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>,
     document.body
