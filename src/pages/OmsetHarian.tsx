@@ -166,12 +166,27 @@ export default function OmsetHarian() {
       (!qKd || r.kodePelanggan.toLowerCase().includes(qKd))
     );
   }, [filtered, historySearchNoFaktur, historySearchKdPelanggan]);
+  // Daftar pilihan "Nama Barang" untuk filter Riwayat Pengambilan — dihitung
+  // dari historyScopedRows (yang sudah kena filter Depo/Sales/Supp/Bulan/
+  // Tahun/Tanggal/No Faktur/KD Pelanggan), jadi kalau mis. Supp=Milan sudah
+  // dipilih, dropdown Nama Barang di sini otomatis hanya berisi barang-barang
+  // Milan saja (sama seperti perilaku dropdown Sales terhadap Depo/Bulan/Tahun).
+  const [historyNamaBarang, setHistoryNamaBarang] = useState<string[]>([]);
+  const namaBarangOptions = useMemo(
+    () => Array.from(new Set(historyScopedRows.map((r) => r.namaBarang).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [historyScopedRows]
+  );
+  useEffect(() => {
+    setHistoryNamaBarang((prev) => prev.filter((n) => namaBarangOptions.includes(n)));
+  }, [namaBarangOptions]);
   const historyAll = useMemo(() => customerPurchaseHistory(historyScopedRows), [historyScopedRows]);
   const historyFiltered = useMemo(() => {
     const q = historySearchNamaPelanggan.trim().toLowerCase();
-    if (!q) return historyAll;
-    return historyAll.filter((r) => r.namaPelanggan.toLowerCase().includes(q));
-  }, [historyAll, historySearchNamaPelanggan]);
+    return historyAll.filter((r) =>
+      (!q || r.namaPelanggan.toLowerCase().includes(q)) &&
+      (historyNamaBarang.length === 0 || historyNamaBarang.includes(r.namaBarang))
+    );
+  }, [historyAll, historySearchNamaPelanggan, historyNamaBarang]);
   const historyShown = useMemo(() => historyFiltered.slice(0, HISTORY_ROWS_LIMIT), [historyFiltered]);
 
   const trendRef = useRef<HTMLDivElement>(null);
@@ -648,6 +663,15 @@ export default function OmsetHarian() {
                   allLabel="Semua Supplier"
                 />
               </div>
+              <div className="w-full sm:w-56">
+                <MultiSelect
+                  label="Nama Barang"
+                  options={namaBarangOptions.map((n) => ({ value: n, label: n }))}
+                  selected={historyNamaBarang}
+                  onChange={setHistoryNamaBarang}
+                  allLabel="Semua Barang"
+                />
+              </div>
               <div className="w-full sm:w-40">
                 <MultiSelect
                   label="Bulan"
@@ -671,7 +695,7 @@ export default function OmsetHarian() {
           </div>
 
           <p className="text-[11px] text-ink-400 mb-2">
-            Filter Tanggal/Depo/Supp/Bulan/Tahun di atas berlaku untuk seluruh halaman Omset Harian; diurutkan dari nominal tertinggi, gulir di dalam tabel untuk melihat semua — menampilkan {formatNumber(historyShown.length)} dari {formatNumber(historyFiltered.length)} baris.
+            Filter Tanggal/Depo/Supp/Bulan/Tahun di atas berlaku untuk seluruh halaman Omset Harian, sedangkan Nama Barang khusus menyaring tabel Riwayat ini (pilihannya otomatis menyesuaikan Supp/Depo/Bulan/Tahun yang aktif — mis. kalau Supp=Milan dipilih, pilihan Nama Barang hanya menampilkan barang Milan); diurutkan dari nominal tertinggi, gulir di dalam tabel untuk melihat semua — menampilkan {formatNumber(historyShown.length)} dari {formatNumber(historyFiltered.length)} baris.
           </p>
 
           <div className="overflow-auto mt-1 max-h-[420px] border border-ink-100 dark:border-ink-800 rounded-lg">
