@@ -188,6 +188,13 @@ export default function OmsetHarian() {
     );
   }, [historyAll, historySearchNamaPelanggan, historyNamaBarang]);
   const historyShown = useMemo(() => historyFiltered.slice(0, HISTORY_ROWS_LIMIT), [historyFiltered]);
+  // Grand Total tabel Riwayat Pengambilan dihitung dari SELURUH baris hasil
+  // filter (historyFiltered), bukan cuma yang ditampilkan (historyShown yang
+  // dibatasi HISTORY_ROWS_LIMIT), supaya totalnya tetap akurat walau baris
+  // di tabel dibatasi/di-scroll.
+  const historyTotalQty = useMemo(() => historyFiltered.reduce((a, r) => a + r.totalQty, 0), [historyFiltered]);
+  const historyTotalNominal = useMemo(() => historyFiltered.reduce((a, r) => a + r.totalNominal, 0), [historyFiltered]);
+  const historyTotalFrekuensi = useMemo(() => historyFiltered.reduce((a, r) => a + r.frekuensi, 0), [historyFiltered]);
 
   const trendRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<HTMLDivElement>(null);
@@ -739,6 +746,16 @@ export default function OmsetHarian() {
                   <tr><td colSpan={13} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
                 )}
               </tbody>
+              {historyFiltered.length > 0 && (
+                <tfoot className="sticky bottom-0 z-10">
+                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 font-extrabold">
+                    <td className="py-2.5 pr-3 pl-3" colSpan={10}>Grand Total ({formatNumber(historyFiltered.length)} baris)</td>
+                    <td className="py-2.5 pr-3 text-right whitespace-nowrap">{formatNumber(historyTotalQty)}</td>
+                    <td className="py-2.5 pr-3 text-right whitespace-nowrap">{formatRupiah(historyTotalNominal)}</td>
+                    <td className="py-2.5 pr-3 text-right whitespace-nowrap">{formatNumber(historyTotalFrekuensi)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
           <p className="text-[11px] text-ink-400 mt-2">
