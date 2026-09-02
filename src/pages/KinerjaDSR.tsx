@@ -345,6 +345,14 @@ export default function KinerjaDSR() {
     : monthlyCompareDetail.mode === 'month'
       ? `${monthlyCompareDetail.label} ${cmpTahunBLabel}`
       : `${bulanLabel(cmpBulanB)} ${cmpTahunBLabel}`;
+  const monthlyCompareDetailRef = useRef<HTMLDivElement>(null);
+  const monthlyCompareDetailFilename = !monthlyCompareDetail
+    ? 'rincian-perbandingan-bulanan'
+    : monthlyCompareDetail.mode === 'month'
+      ? `rincian-bulan-${monthlyCompareDetail.label.toLowerCase()}`
+      : `rincian-perbandingan-${bulanLabel(cmpBulanA)}-${cmpTahunALabel}-vs-${bulanLabel(cmpBulanB)}-${cmpTahunBLabel}`
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-');
 
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
@@ -1128,7 +1136,10 @@ export default function KinerjaDSR() {
         subtitle={monthlyCompareDetailSubtitle}
       >
         {monthlyCompareDetailData && (
-          <div className="space-y-4">
+          <div ref={monthlyCompareDetailRef} className="space-y-4">
+            <div className="flex justify-end -mt-1 -mb-1">
+              <ExportMenu targetRef={monthlyCompareDetailRef} filename={monthlyCompareDetailFilename} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-3">
                 <p className="text-[11px] text-ink-400 font-semibold">Omset {monthlyCompareDetailLabelA}</p>
