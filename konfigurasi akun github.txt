@@ -1,0 +1,123 @@
+mengubah akun github lokal
+Langkah 1. Cek akun Git global
+
+Buka PowerShell atau CMD.
+
+git config --global user.name
+git config --global user.email
+
+hasilnya harusnya 
+Fuad Hasyim
+fuadhasyim6900@gmail.com
+Artinya semua repository secara default menggunakan akun fuadhasyim6900.
+
+Langkah 2. Masuk ke folder project
+misal
+cd "D:\KERJAAN\12. TAMBAHAN\WEB DASHBOARD\Update-Stok-AP"
+Pastikan benar-benar berada di folder project Git.
+
+Langkah 3. Cek konfigurasi repository
+git config user.name
+git config user.email
+
+Langkah 4. Ubah hanya repository ini
+Misalnya email GitHub fuadhasyimanalyst adalah:
+
+fuadhasyimanalyst@gmail.com
+
+git config user.name "fuadhasyimanalyst"
+git config user.email "fuadhasyimanalyst@gmail.com"
+
+Ganti email di atas dengan email yang benar-benar terhubung ke akun GitHub fuadhasyimanalyst.
+
+
+Langkah 5. Pastikan berhasil
+git config user.name
+git config user.email
+
+Hasil:
+
+fuadhasyimanalyst
+fuadhasyimanalyst@gmail.com
+
+
+Langkah 6. Lihat asal konfigurasi
+
+git config --show-origin --get user.name
+git config --show-origin --get user.email
+
+Kalau hasilnya seperti ini:
+
+file:.git/config
+
+berarti konfigurasi hanya berlaku untuk repository ini.
+
+
+Langkah 7. Commit seperti biasa
+
+git add .
+git commit -m "Update dashboard"
+git push origin main
+
+Sekarang commit author akan menjadi fuadhasyimanalyst.
+
+Langkah 8. Repository lain tetap memakai akun lama
+
+Misalnya pindah ke project lain.
+cd "D:\Project\Data Analyst"
+
+git config user.name
+git config user.email
+
+Masih akan muncul:
+
+Fuad Hasyim
+fuadhasyim6900@gmail.com
+
+Karena repository tersebut tidak mempunyai konfigurasi lokal.
+
+Kalau ingin kembali menggunakan fuadhasyim6900
+
+Masuk lagi ke folder Update-Stok-AP
+
+cd "D:\KERJAAN\12. TAMBAHAN\WEB DASHBOARD\Update-Stok-AP"
+
+Lalu jalankan:
+
+git config user.name "Fuad Hasyim"
+git config user.email "fuadhasyim6900@gmail.com"
+
+Selesai.
+
+Kalau ingin kembali menggunakan konfigurasi global
+
+Hapus konfigurasi lokal:
+
+git config --unset user.name
+git config --unset user.email
+
+Sekarang repository ini akan otomatis menggunakan akun global (fuadhasyim6900).
+
+Cek semua konfigurasi
+Konfigurasi Global
+git config --global --list
+
+Contoh:
+
+user.name=Fuad Hasyim
+user.email=fuadhasyim6900@gmail.com
+Konfigurasi Repository Saat Ini
+git config --local --list
+
+Contoh:
+
+user.name=fuadhasyimanalyst
+user.email=fuadhasyimanalyst@gmail.com
+Yang perlu diperhatikan
+
+Perubahan user.name dan user.email tidak mengubah akun GitHub yang digunakan untuk git push. Akun yang dipakai untuk push ditentukan oleh autentikasi GitHub (PAT/SSH/Credential Manager), sedangkan user.name dan user.email hanya menentukan identitas yang tercatat pada commit.
+
+Karena kasusmu terkait Vercel dan GitHub, saya juga menyarankan kita memastikan autentikasi GitHub yang dipakai sudah sesuai. Jika perlu, saya bisa bantu mengatur agar:
+
+Update-Stok-AP menggunakan akun fuadhasyimanalyst untuk commit dan push.
+Repository lain tetap menggunakan fuadhasyim6900.

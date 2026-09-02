@@ -15,7 +15,7 @@ import {
   supplierBreakdownForDSR, formatRupiah, formatNumber, formatCompactRupiah, sumNominal,
   distinctDSR, distinctCount, pctChange, depoLabel, bulanLabel, tahunLabel,
   targetVsOmsetBySupplier, targetForDSR, sumTarget, DEPO_LIST_EXCLUDING_ADMIN,
-  dsrRankingBySupplier, maxOf, trendByMonth, dsrLabel,
+  dsrRankingBySupplier, maxOf, trendByMonth, dsrLabel, groupSumBy,
 } from '../lib/aggregate';
 import { filterByTanggal, distinctTanggalPresent } from '../lib/omsetHarian';
 import { MONTH_NAMES_ID, MONTH_NAMES_FULL_ID } from '../lib/types';
@@ -261,6 +261,54 @@ export default function KinerjaDSR() {
   // Shared with the DualAxisComboChart below, so the Penjualan/AO figures in
   // the table are colored exactly like their matching bar/line in the chart.
   const CMP_COLORS = { salesA: '#2563eb', salesB: '#eab308', aoA: '#0891b2', aoB: '#a16207' };
+
+  // --- Detail popup for "Tabel Rincian Perbandingan Bulanan" -----------
+  // Clicking a bar (either Tahun A or Tahun B) for a given month opens a
+  // per-supplier omset comparison between the two years, for that month
+  // only, honoring the same Depo/Nama DSR/Supplier filters as the chart.
+  const [monthlyCompareDetail, setMonthlyCompareDetail] = useState<string | null>(null);
+  const monthlyCompareDetailData = useMemo(() => {
+    if (!monthlyCompareDetail) return null;
+    const monthNum = MONTH_NAMES_ID.indexOf(monthlyCompareDetail) + 1;
+    if (monthNum <= 0) return null;
+
+    let rowsA = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunA });
+    let rowsB = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunB });
+    if (compareDSR.length) {
+      rowsA = rowsA.filter((r) => compareDSR.includes(dsrLabel(r)));
+      rowsB = rowsB.filter((r) => compareDSR.includes(dsrLabel(r)));
+    }
+    if (compareSupp.length) {
+      rowsA = rowsA.filter((r) => compareSupp.includes(r.supp));
+      rowsB = rowsB.filter((r) => compareSupp.includes(r.supp));
+    }
+
+    const monthRowsA = cmpBulanAEffective.includes(monthNum) ? rowsA.filter((r) => r.monthNum === monthNum) : [];
+    const monthRowsB = cmpBulanBEffective.includes(monthNum) ? rowsB.filter((r) => r.monthNum === monthNum) : [];
+
+    const totalA = sumNominal(monthRowsA);
+    const totalB = sumNominal(monthRowsB);
+    const byA = new Map(groupSumBy(monthRowsA, 'supp').map((g) => [g.label, g.value]));
+    const byB = new Map(groupSumBy(monthRowsB, 'supp').map((g) => [g.label, g.value]));
+    const suppliers = Array.from(new Set([...byA.keys(), ...byB.keys()]));
+
+    const rows = suppliers
+      .map((supplier) => {
+        const nominalA = byA.get(supplier) || 0;
+        const nominalB = byB.get(supplier) || 0;
+        return {
+          supplier,
+          nominalA,
+          porsiA: totalA ? (nominalA / totalA) * 100 : 0,
+          nominalB,
+          porsiB: totalB ? (nominalB / totalB) * 100 : 0,
+          growth: nominalA && nominalB ? pctChange(nominalB, nominalA) : null,
+        };
+      })
+      .sort((a, b) => (b.nominalA + b.nominalB) - (a.nominalA + a.nominalB));
+
+    return { totalA, totalB, rows };
+  }, [monthlyCompareDetail, sales, filters.depo, cmpTahunA, cmpTahunB, compareDSR, compareSupp, cmpBulanAEffective, cmpBulanBEffective]);
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
   // Own "Nama DSR" and "Supplier" filters (multi-select, default = semua).
@@ -677,7 +725,11 @@ export default function KinerjaDSR() {
             leftTooltipFormatter={(v) => formatRupiah(v)}
             rightFormatter={(v) => formatNumber(v)}
             rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
+            onBarClick={(row) => setMonthlyCompareDetail(String(row.bulan))}
           />
+          <p className="text-[11px] text-ink-400 mt-2">
+            Klik salah satu bar untuk melihat rincian perbandingan supplier &amp; nominal omset di bulan tersebut.
+          </p>
 
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-sm">
@@ -694,7 +746,11 @@ export default function KinerjaDSR() {
               </thead>
               <tbody>
                 {dsrSalesComparison.rows.map((m) => (
-                  <tr key={m.bulan} className="border-b border-ink-50 dark:border-ink-800/60">
+                  <tr
+                    key={m.bulan}
+                    onClick={() => setMonthlyCompareDetail(m.bulan)}
+                    className="border-b border-ink-50 dark:border-ink-800/60 cursor-pointer hover:bg-ink-50 dark:hover:bg-ink-800/60"
+                  >
                     <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
                     <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesA }}>{m.inA ? formatRupiah(m.salesA) : '-'}</td>
                     <td className="py-2 pr-3 text-right font-semibold" style={{ color: CMP_COLORS.salesB }}>{m.inB ? formatRupiah(m.salesB) : '-'}</td>
@@ -1002,6 +1058,80 @@ export default function KinerjaDSR() {
                     <span className="font-semibold">{formatRupiah(s.nominal)} <span className="text-ink-400 font-normal">({s.porsi.toFixed(1)}%)</span></span>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </DetailModal>
+
+      <DetailModal
+        open={!!monthlyCompareDetail}
+        onClose={() => setMonthlyCompareDetail(null)}
+        title={`Rincian Bulan: ${monthlyCompareDetail ?? ''}`}
+        subtitle={`Perbandingan Supplier · Tahun ${cmpTahunALabel} vs Tahun ${cmpTahunBLabel} · ${depoLabel(filters.depo)}${compareDSR.length ? ` · ${compareDSR.join(', ')}` : ''}`}
+      >
+        {monthlyCompareDetailData && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-3">
+                <p className="text-[11px] text-ink-400 font-semibold">Omset Tahun {cmpTahunALabel}</p>
+                <p className="text-lg font-extrabold" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(monthlyCompareDetailData.totalA)}</p>
+              </div>
+              <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-3">
+                <p className="text-[11px] text-ink-400 font-semibold">Omset Tahun {cmpTahunBLabel}</p>
+                <p className="text-lg font-extrabold" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(monthlyCompareDetailData.totalB)}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold mb-2">Breakdown Supplier</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
+                      <th className="py-2 pr-3">Supplier</th>
+                      <th className="py-2 pr-3 text-right">Omset {cmpTahunALabel}</th>
+                      <th className="py-2 pr-3 text-right">Omset {cmpTahunBLabel}</th>
+                      <th className="py-2 pr-3 text-right">Pertumbuhan (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyCompareDetailData.rows.map((s) => (
+                      <tr key={s.supplier} className="border-b border-ink-50 dark:border-ink-800/60">
+                        <td className="py-2 pr-3 font-semibold">{s.supplier}</td>
+                        <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>
+                          {s.nominalA ? formatRupiah(s.nominalA) : '-'}
+                          {s.nominalA > 0 && <span className="text-ink-400 font-normal"> ({s.porsiA.toFixed(1)}%)</span>}
+                        </td>
+                        <td className="py-2 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>
+                          {s.nominalB ? formatRupiah(s.nominalB) : '-'}
+                          {s.nominalB > 0 && <span className="text-ink-400 font-normal"> ({s.porsiB.toFixed(1)}%)</span>}
+                        </td>
+                        <td className={`py-2 pr-3 text-right font-semibold ${s.growth === null ? 'text-ink-400' : s.growth >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                          {s.growth === null ? '-' : `${s.growth >= 0 ? '+' : ''}${s.growth.toFixed(1)}%`}
+                        </td>
+                      </tr>
+                    ))}
+                    {monthlyCompareDetailData.rows.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-ink-400">Tidak ada data untuk bulan ini</td></tr>
+                    )}
+                  </tbody>
+                  {monthlyCompareDetailData.rows.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                        <td className="py-2.5 pr-3">Grand Total</td>
+                        <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(monthlyCompareDetailData.totalA)}</td>
+                        <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(monthlyCompareDetailData.totalB)}</td>
+                        <td className={`py-2.5 pr-3 text-right ${pctChange(monthlyCompareDetailData.totalB, monthlyCompareDetailData.totalA) === null ? 'text-ink-400' : (pctChange(monthlyCompareDetailData.totalB, monthlyCompareDetailData.totalA) as number) >= 0 ? 'text-emerald-600' : 'text-brand-600'}`}>
+                          {(() => {
+                            const g = pctChange(monthlyCompareDetailData.totalB, monthlyCompareDetailData.totalA);
+                            return g === null ? '-' : `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
+                          })()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               </div>
             </div>
           </div>

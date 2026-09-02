@@ -1,0 +1,24 @@
+cek akun github global
+git config --global user.name
+git config --global user.email
+
+Cek konfigurasi repository
+git config user.name
+git config user.email
+
+Ubah hanya repository ini
+git config user.name "fuadhasyimanalyst"
+git config user.email "fuadhasyimanalyst@gmail.com"
+
+Pastikan berhasil
+git config user.name
+git config user.email
+
+Commit seperti biasa
+git add .
+git commit -m "Update dashboard"
+git push origin main
+
+Kalau ingin kembali menggunakan fuadhasyim6900
+git config user.name "Fuad Hasyim"
+git config user.email "fuadhasyim6900@gmail.com"

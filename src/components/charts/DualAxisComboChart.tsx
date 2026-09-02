@@ -21,6 +21,7 @@ interface LineSeries {
 // other's scale.
 export default function DualAxisComboChart({
   data, xKey, bars, lines, height = 320, leftFormatter, rightFormatter, leftTooltipFormatter, rightTooltipFormatter,
+  onBarClick,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
@@ -31,6 +32,11 @@ export default function DualAxisComboChart({
   rightFormatter: (v: number) => string;
   leftTooltipFormatter?: (v: number) => string;
   rightTooltipFormatter?: (v: number) => string;
+  // Fired with the original data row (the full x-axis entry, e.g. one
+  // month's { bulan, salesA, salesB, aoA, aoB, ... }) when any bar is
+  // clicked, regardless of which bar series was clicked — used to open a
+  // detail popup for that x-axis entry (e.g. per-supplier breakdown).
+  onBarClick?: (row: Record<string, unknown>) => void;
 }) {
   const barKeys = new Set(bars.map((b) => b.key));
   const fmtLeftTooltip = leftTooltipFormatter || leftFormatter;
@@ -62,7 +68,20 @@ export default function DualAxisComboChart({
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {bars.map((s) => (
-          <Bar key={s.key} yAxisId="left" dataKey={s.key} name={s.name} fill={s.color} radius={[4, 4, 0, 0]} barSize={22} />
+          <Bar
+            key={s.key}
+            yAxisId="left"
+            dataKey={s.key}
+            name={s.name}
+            fill={s.color}
+            radius={[4, 4, 0, 0]}
+            barSize={22}
+            style={onBarClick ? { cursor: 'pointer' } : undefined}
+            onClick={onBarClick ? (barData: unknown) => {
+              const payload = (barData as { payload?: Record<string, unknown> })?.payload;
+              onBarClick(payload ?? (barData as Record<string, unknown>));
+            } : undefined}
+          />
         ))}
         {lines.map((s) => (
           <Line

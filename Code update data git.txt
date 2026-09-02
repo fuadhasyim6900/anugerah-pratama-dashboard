@@ -1,0 +1,16 @@
+update datanya saja misal
+git add public/data/DATA.xlsx
+git commit -m "Update data 17 Juli 2026"
+git push
+
+update Semua file
+git add .
+git commit -m "update harian"
+git push
+
+cara pull atau menarik data dari git hub ke komputer lokal
+git pull origin main (catatan apabila nama branch adalah main) apabila namanya master maka tinggal ganti
+git pull origin master
+kemudian update kembali
+dengan cara
+git push origin main
