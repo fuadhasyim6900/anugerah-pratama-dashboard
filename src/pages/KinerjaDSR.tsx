@@ -263,14 +263,23 @@ export default function KinerjaDSR() {
   const CMP_COLORS = { salesA: '#2563eb', salesB: '#eab308', aoA: '#0891b2', aoB: '#a16207' };
 
   // --- Detail popup for "Tabel Rincian Perbandingan Bulanan" -----------
-  // Clicking a bar (either Tahun A or Tahun B) for a given month opens a
-  // per-supplier omset comparison between the two years, for that month
-  // only, honoring the same Depo/Nama DSR/Supplier filters as the chart.
-  const [monthlyCompareDetail, setMonthlyCompareDetail] = useState<string | null>(null);
+  // Clicking a bar opens a per-supplier omset comparison between Tahun A
+  // and Tahun B, honoring the same Depo/Nama DSR/Supplier filters as the
+  // chart. Two modes:
+  //  - 'month': the clicked calendar month has data on BOTH sides (e.g.
+  //    comparing "Juni 2025" vs "Juni 2026") -> restrict both sides to
+  //    that one month, so it's a true apples-to-apples comparison.
+  //  - 'full': the clicked bar only has data on ONE side (e.g. Bulan A =
+  //    Juni, Bulan B = Juli -> two entirely different months, so each
+  //    bar is only ever populated on one side). In that case a single
+  //    month's restriction would show one side as empty, which isn't a
+  //    real comparison — so instead we compare the FULL selected period
+  //    of each side (whatever Bulan A / Bulan B are set to), regardless
+  //    of which bar was clicked.
+  type MonthlyCompareTarget = { mode: 'month'; monthNum: number; label: string } | { mode: 'full' };
+  const [monthlyCompareDetail, setMonthlyCompareDetail] = useState<MonthlyCompareTarget | null>(null);
   const monthlyCompareDetailData = useMemo(() => {
     if (!monthlyCompareDetail) return null;
-    const monthNum = MONTH_NAMES_ID.indexOf(monthlyCompareDetail) + 1;
-    if (monthNum <= 0) return null;
 
     let rowsA = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunA });
     let rowsB = applyFilters(sales, { depo: filters.depo, bulan: [], tahun: cmpTahunB });
@@ -283,8 +292,16 @@ export default function KinerjaDSR() {
       rowsB = rowsB.filter((r) => compareSupp.includes(r.supp));
     }
 
-    const monthRowsA = cmpBulanAEffective.includes(monthNum) ? rowsA.filter((r) => r.monthNum === monthNum) : [];
-    const monthRowsB = cmpBulanBEffective.includes(monthNum) ? rowsB.filter((r) => r.monthNum === monthNum) : [];
+    let monthRowsA: typeof rowsA;
+    let monthRowsB: typeof rowsB;
+    if (monthlyCompareDetail.mode === 'month') {
+      const { monthNum } = monthlyCompareDetail;
+      monthRowsA = cmpBulanAEffective.includes(monthNum) ? rowsA.filter((r) => r.monthNum === monthNum) : [];
+      monthRowsB = cmpBulanBEffective.includes(monthNum) ? rowsB.filter((r) => r.monthNum === monthNum) : [];
+    } else {
+      monthRowsA = rowsA.filter((r) => cmpBulanAEffective.includes(r.monthNum));
+      monthRowsB = rowsB.filter((r) => cmpBulanBEffective.includes(r.monthNum));
+    }
 
     const totalA = sumNominal(monthRowsA);
     const totalB = sumNominal(monthRowsB);
@@ -309,6 +326,26 @@ export default function KinerjaDSR() {
 
     return { totalA, totalB, rows };
   }, [monthlyCompareDetail, sales, filters.depo, cmpTahunA, cmpTahunB, compareDSR, compareSupp, cmpBulanAEffective, cmpBulanBEffective]);
+
+  const monthlyCompareDetailTitle = !monthlyCompareDetail
+    ? ''
+    : monthlyCompareDetail.mode === 'month'
+      ? `Rincian Bulan: ${monthlyCompareDetail.label}`
+      : `Rincian Perbandingan: ${bulanLabel(cmpBulanA)} ${cmpTahunALabel} vs ${bulanLabel(cmpBulanB)} ${cmpTahunBLabel}`;
+  const monthlyCompareDetailSubtitle = !monthlyCompareDetail
+    ? ''
+    : `Perbandingan Supplier · Tahun ${cmpTahunALabel} vs Tahun ${cmpTahunBLabel} · ${depoLabel(filters.depo)}${compareDSR.length ? ` · ${compareDSR.join(', ')}` : ''}`;
+  const monthlyCompareDetailLabelA = !monthlyCompareDetail
+    ? ''
+    : monthlyCompareDetail.mode === 'month'
+      ? `${monthlyCompareDetail.label} ${cmpTahunALabel}`
+      : `${bulanLabel(cmpBulanA)} ${cmpTahunALabel}`;
+  const monthlyCompareDetailLabelB = !monthlyCompareDetail
+    ? ''
+    : monthlyCompareDetail.mode === 'month'
+      ? `${monthlyCompareDetail.label} ${cmpTahunBLabel}`
+      : `${bulanLabel(cmpBulanB)} ${cmpTahunBLabel}`;
+
 
   // --- Tabel Target vs Omset per Supplier ------------------------------
   // Own "Nama DSR" and "Supplier" filters (multi-select, default = semua).
@@ -725,7 +762,17 @@ export default function KinerjaDSR() {
             leftTooltipFormatter={(v) => formatRupiah(v)}
             rightFormatter={(v) => formatNumber(v)}
             rightTooltipFormatter={(v) => `${formatNumber(v)} outlet`}
-            onBarClick={(row) => setMonthlyCompareDetail(String(row.bulan))}
+            onBarClick={(row) => {
+              const bulan = String(row.bulan ?? '');
+              const inA = Boolean(row.inA);
+              const inB = Boolean(row.inB);
+              if (inA && inB) {
+                const monthNum = MONTH_NAMES_ID.indexOf(bulan) + 1;
+                setMonthlyCompareDetail(monthNum > 0 ? { mode: 'month', monthNum, label: bulan } : { mode: 'full' });
+              } else {
+                setMonthlyCompareDetail({ mode: 'full' });
+              }
+            }}
           />
           <p className="text-[11px] text-ink-400 mt-2">
             Klik salah satu bar untuk melihat rincian perbandingan supplier &amp; nominal omset di bulan tersebut.
@@ -748,7 +795,14 @@ export default function KinerjaDSR() {
                 {dsrSalesComparison.rows.map((m) => (
                   <tr
                     key={m.bulan}
-                    onClick={() => setMonthlyCompareDetail(m.bulan)}
+                    onClick={() => {
+                      if (m.inA && m.inB) {
+                        const monthNum = MONTH_NAMES_ID.indexOf(m.bulan) + 1;
+                        setMonthlyCompareDetail(monthNum > 0 ? { mode: 'month', monthNum, label: m.bulan } : { mode: 'full' });
+                      } else {
+                        setMonthlyCompareDetail({ mode: 'full' });
+                      }
+                    }}
                     className="border-b border-ink-50 dark:border-ink-800/60 cursor-pointer hover:bg-ink-50 dark:hover:bg-ink-800/60"
                   >
                     <td className="py-2 pr-3 font-semibold">{m.bulan}</td>
@@ -768,7 +822,10 @@ export default function KinerjaDSR() {
                   <tr><td colSpan={7} className="py-6 text-center text-ink-400">Tidak ada data untuk filter ini</td></tr>
                 )}
                 {dsrSalesComparison.grandTotal && dsrSalesComparison.rows.length > 0 && (
-                  <tr className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold">
+                  <tr
+                    onClick={() => setMonthlyCompareDetail({ mode: 'full' })}
+                    className="border-t-2 border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800/60 font-extrabold cursor-pointer hover:bg-ink-100 dark:hover:bg-ink-800"
+                  >
                     <td className="py-2.5 pr-3">Grand Total</td>
                     <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(dsrSalesComparison.grandTotal.salesA)}</td>
                     <td className="py-2.5 pr-3 text-right" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(dsrSalesComparison.grandTotal.salesB)}</td>
@@ -1067,18 +1124,18 @@ export default function KinerjaDSR() {
       <DetailModal
         open={!!monthlyCompareDetail}
         onClose={() => setMonthlyCompareDetail(null)}
-        title={`Rincian Bulan: ${monthlyCompareDetail ?? ''}`}
-        subtitle={`Perbandingan Supplier · Tahun ${cmpTahunALabel} vs Tahun ${cmpTahunBLabel} · ${depoLabel(filters.depo)}${compareDSR.length ? ` · ${compareDSR.join(', ')}` : ''}`}
+        title={monthlyCompareDetailTitle}
+        subtitle={monthlyCompareDetailSubtitle}
       >
         {monthlyCompareDetailData && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-3">
-                <p className="text-[11px] text-ink-400 font-semibold">Omset Tahun {cmpTahunALabel}</p>
+                <p className="text-[11px] text-ink-400 font-semibold">Omset {monthlyCompareDetailLabelA}</p>
                 <p className="text-lg font-extrabold" style={{ color: CMP_COLORS.salesA }}>{formatRupiah(monthlyCompareDetailData.totalA)}</p>
               </div>
               <div className="rounded-lg bg-ink-50 dark:bg-ink-800 p-3">
-                <p className="text-[11px] text-ink-400 font-semibold">Omset Tahun {cmpTahunBLabel}</p>
+                <p className="text-[11px] text-ink-400 font-semibold">Omset {monthlyCompareDetailLabelB}</p>
                 <p className="text-lg font-extrabold" style={{ color: CMP_COLORS.salesB }}>{formatRupiah(monthlyCompareDetailData.totalB)}</p>
               </div>
             </div>
@@ -1090,8 +1147,8 @@ export default function KinerjaDSR() {
                   <thead>
                     <tr className="text-left text-xs text-ink-400 uppercase tracking-wide border-b border-ink-100 dark:border-ink-800">
                       <th className="py-2 pr-3">Supplier</th>
-                      <th className="py-2 pr-3 text-right">Omset {cmpTahunALabel}</th>
-                      <th className="py-2 pr-3 text-right">Omset {cmpTahunBLabel}</th>
+                      <th className="py-2 pr-3 text-right">Omset {monthlyCompareDetailLabelA}</th>
+                      <th className="py-2 pr-3 text-right">Omset {monthlyCompareDetailLabelB}</th>
                       <th className="py-2 pr-3 text-right">Pertumbuhan (%)</th>
                     </tr>
                   </thead>
