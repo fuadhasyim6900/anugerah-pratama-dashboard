@@ -870,6 +870,24 @@ export default function KinerjaDSR() {
                   allLabel="Semua Depo"
                 />
               </div>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  label="Bulan"
+                  options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  selected={filters.bulan.map(String)}
+                  onChange={(v) => filters.setBulan(v.map(Number))}
+                  allLabel="Semua Bulan (YTD)"
+                />
+              </div>
+              <div className="w-full sm:w-32">
+                <MultiSelect
+                  label="Tahun"
+                  options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
+                  selected={filters.tahun.map(String)}
+                  onChange={(v) => filters.setTahun(v.map(Number))}
+                  allLabel="Semua Tahun"
+                />
+              </div>
               <div className="w-full sm:w-48">
                 <MultiSelect
                   label="Supplier"
