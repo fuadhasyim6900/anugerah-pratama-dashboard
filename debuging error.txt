@@ -1,0 +1,95 @@
+PS C:\APP FUAD\Update-Stok-AP> npm run sync-to-supabase
+
+> update-stok-dashboard@0.1.0 sync-to-supabase
+> node scripts/sync-to-supabase.js
+
+[sync] Membaca file Excel...
+[sync] 3412 baris siap dikirim ke Supabase (data per 10-08-2026)
+[sync] Mengosongkan tabel stok lama...
+[sync] 500/3412 baris terkirim
+[sync] 1000/3412 baris terkirim
+[sync] 1500/3412 baris terkirim
+[sync] 2000/3412 baris terkirim
+[sync] 2500/3412 baris terkirim
+[sync] 3000/3412 baris terkirim
+[sync] 3412/3412 baris terkirim
+[sync] Update metadata (as_of_date, generated_at)...
+[sync] Selesai! Data per tanggal: 10-08-2026
+PS C:\APP FUAD\Update-Stok-AP> 
+ *  History restored 
+
+PS C:\APP FUAD\Update-Stok-AP> git pull origin main
+remote: Enumerating objects: 14, done.
+remote: Counting objects: 100% (14/14), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 9 (delta 5), reused 9 (delta 5), pack-reused 0 (from 0)
+Unpacking objects: 100% (9/9), 2.62 KiB | 116.00 KiB/s, done.
+ * branch            main       -> FETCH_HEAD
+   e697a1f..bcc101a  main       -> origin/main
+Updating e697a1f..bcc101a
+Fast-forward
+ app/api/revalidate/route.js | 41 +++++++++++++++++++++++++++++++++++++++++
+ app/page.js                 | 20 +++++++++++++++++---
+ scripts/sync-to-supabase.js | 24 ++++++++++++++++++++++++
+ 3 files changed, 82 insertions(+), 3 deletions(-)
+ create mode 100644 app/api/revalidate/route.js
+PS C:\APP FUAD\Update-Stok-AP> npm run sync-to-supabase
+
+> update-stok-dashboard@0.1.0 sync-to-supabase
+> node scripts/sync-to-supabase.js
+
+[sync] Membaca file Excel...
+[sync] 3412 baris siap dikirim ke Supabase (data per 11-08-2026)
+[sync] Mengosongkan tabel stok lama...
+[sync] 500/3412 baris terkirim
+[sync] 1000/3412 baris terkirim
+[sync] 1500/3412 baris terkirim
+[sync] 2000/3412 baris terkirim
+[sync] 2500/3412 baris terkirim
+[sync] 3000/3412 baris terkirim
+[sync] 3412/3412 baris terkirim
+[sync] Update metadata (as_of_date, generated_at)...
+[sync] Selesai! Data per tanggal: 11-08-2026
+[sync] Cache halaman berhasil diperbarui (revalidate on-demand).
+PS C:\APP FUAD\Update-Stok-AP> 
+ *  History restored 
+
+PS C:\APP FUAD\Update-Stok-AP> npm run sync-to-supabase
+
+> update-stok-dashboard@0.1.0 sync-to-supabase
+> node scripts/sync-to-supabase.js
+
+[sync] Membaca file Excel...
+[sync] 3415 baris siap dikirim ke Supabase (data per 11-08-2026)
+[sync] Mengosongkan tabel stok lama...
+[sync] 500/3415 baris terkirim
+[sync] 1000/3415 baris terkirim
+[sync] 1500/3415 baris terkirim
+[sync] 2000/3415 baris terkirim
+[sync] 2500/3415 baris terkirim
+[sync] 3000/3415 baris terkirim
+[sync] 3415/3415 baris terkirim
+[sync] Update metadata (as_of_date, generated_at)...
+[sync] Selesai! Data per tanggal: 11-08-2026
+[sync] Cache halaman berhasil diperbarui (revalidate on-demand).
+PS C:\APP FUAD\Update-Stok-AP> 
+ *  History restored 
+
+PS C:\APP FUAD\Update-Stok-AP> npm run sync-to-supabase
+
+> update-stok-dashboard@0.1.0 sync-to-supabase
+> node scripts/sync-to-supabase.js
+
+[sync] Membaca file Excel...
+[sync] 3414 baris siap dikirim ke Supabase (data per 12-08-2026)
+[sync] Mengosongkan tabel stok lama...
+[sync] 500/3414 baris terkirim
+[sync] 1000/3414 baris terkirim
+[sync] 1500/3414 baris terkirim
+[sync] 2000/3414 baris terkirim
+[sync] 2500/3414 baris terkirim
+[sync] 3000/3414 baris terkirim
+[sync] 3414/3414 baris terkirim
+[sync] Update metadata (as_of_date, generated_at)...
+[sync] Selesai! Data per tanggal: 12-08-2026
+[sync] Cache halaman berhasil diperbarui (revalidate on-demand).
