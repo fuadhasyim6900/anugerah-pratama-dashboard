@@ -9,6 +9,7 @@ import ProyeksiS2 from './pages/ProyeksiS2';
 import ReviewDSR from './pages/ReviewDSR';
 import RealisasiUangMasuk from './pages/RealisasiUangMasuk';
 import OmsetHarian from './pages/OmsetHarian';
+import PerformaOutlet from './pages/PerformaOutlet';
 import { DataProvider } from './hooks/useSalesData';
 import { useThemeStore } from './store/theme';
 import { useUIStore } from './store/ui';
@@ -78,6 +79,7 @@ function Layout() {
           <Route path="/review-dsr" element={<ReviewDSR />} />
           <Route path="/realisasi-uang-masuk" element={<RealisasiUangMasuk />} />
           <Route path="/omset-harian" element={<OmsetHarian />} />
+          <Route path="/performa-outlet" element={<PerformaOutlet />} />
         </Routes>
         <PageFooter />
       </main>

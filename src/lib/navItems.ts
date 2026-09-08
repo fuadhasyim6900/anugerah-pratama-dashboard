@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, TrendingUp, ClipboardList, Wallet, CalendarClock } from 'lucide-react';
+import { LayoutDashboard, Users, TrendingUp, ClipboardList, Wallet, CalendarClock, Store } from 'lucide-react';
 
 export interface NavSection {
   /** Matches the `id` attribute on that section's card in the page. */
@@ -56,6 +56,13 @@ export const NAV_ITEMS: NavItem[] = [
     sections: [
       { id: 'sec-tren-proyeksi', label: 'Grafik Tren Penjualan' },
       { id: 'sec-rincian-proyeksi', label: 'Rincian Bulanan Proyeksi' },
+    ],
+  },
+  {
+    to: '/performa-outlet', label: 'Performa Outlet', shortLabel: 'Outlet', icon: Store,
+    sections: [
+      { id: 'sec-performa-outlet-trend', label: 'Grafik Performa Outlet' },
+      { id: 'sec-performa-outlet-supplier', label: 'Performa Supplier' },
     ],
   },
   { to: '/review-dsr', label: 'Review & Solusi DSR', shortLabel: 'Review', icon: ClipboardList },
