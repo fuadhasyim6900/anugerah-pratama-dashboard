@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, X, Search } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface MultiSelectOption {
@@ -8,7 +8,7 @@ export interface MultiSelectOption {
 }
 
 export default function MultiSelect({
-  label, icon, options, selected, onChange, allLabel = 'Semua',
+  label, icon, options, selected, onChange, allLabel = 'Semua', searchable = false, searchPlaceholder = 'Cari...',
 }: {
   label?: string;
   icon?: ReactNode;
@@ -16,8 +16,14 @@ export default function MultiSelect({
   selected: string[];
   onChange: (values: string[]) => void;
   allLabel?: string;
+  /** Menampilkan kolom pencarian di dalam dropdown, untuk menyaring daftar
+   * opsi secara manual (mis. mengetik nama pelanggan/sales) — berguna kalau
+   * jumlah opsinya banyak. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +33,12 @@ export default function MultiSelect({
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
+
+  // Reset kolom pencarian setiap kali dropdown ditutup, supaya tidak
+  // "nyangkut" menampilkan hasil filter lama saat dibuka lagi.
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
 
   function toggle(value: string) {
     if (selected.includes(value)) onChange(selected.filter((v) => v !== value));
@@ -39,6 +51,10 @@ export default function MultiSelect({
       ? (options.find((o) => o.value === selected[0])?.label || selected[0])
       : `${selected.length} dipilih`;
 
+  const visibleOptions = searchable && search.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
+
   return (
     <div className="relative" ref={ref}>
       {label && (
@@ -46,17 +62,47 @@ export default function MultiSelect({
           {icon} {label}
         </span>
       )}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-2 text-sm rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-3 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
-      >
-        <span className="truncate text-left leading-6">{displayText}</span>
-        <ChevronDown size={14} className={clsx('shrink-0 transition-transform text-ink-400', open && 'rotate-180')} />
-      </button>
+      <div className="flex items-stretch gap-1">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 min-w-0 flex items-center justify-between gap-2 text-sm rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-3 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+          <span className="truncate text-left leading-6">{displayText}</span>
+          <ChevronDown size={14} className={clsx('shrink-0 transition-transform text-ink-400', open && 'rotate-180')} />
+        </button>
+        {/* Tombol cepat "hapus pilihan" — terpisah dari tombol utama supaya
+            bisa mengosongkan filter tanpa perlu membuka dropdown-nya dulu. */}
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange([]); }}
+            title={`Hapus pilihan ${label || allLabel}`}
+            aria-label={`Hapus pilihan ${label || allLabel}`}
+            className="shrink-0 flex items-center justify-center w-9 rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 text-ink-400 hover:text-brand-600 hover:border-brand-300 dark:hover:border-brand-700"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
 
       {open && (
         <div className="absolute z-50 mt-1 w-max min-w-full max-w-[min(24rem,90vw)] max-h-[45vh] sm:max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 shadow-card p-1">
+          {searchable && (
+            <div className="sticky top-0 z-10 bg-white dark:bg-ink-900 p-1 pb-1.5 mb-1 border-b border-ink-100 dark:border-ink-800">
+              <div className="flex items-center gap-1.5 rounded-md border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2 py-1.5">
+                <Search size={13} className="shrink-0 text-ink-400" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full bg-transparent text-sm focus:outline-none placeholder:text-ink-400"
+                />
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => onChange([])}
@@ -74,7 +120,7 @@ export default function MultiSelect({
             {allLabel}
           </button>
           <div className="my-1 border-t border-ink-100 dark:border-ink-800" />
-          {options.map((o) => {
+          {visibleOptions.map((o) => {
             const checked = selected.includes(o.value);
             return (
               <button
@@ -96,8 +142,10 @@ export default function MultiSelect({
               </button>
             );
           })}
-          {options.length === 0 && (
-            <p className="text-xs text-ink-400 text-center py-3">Tidak ada opsi</p>
+          {visibleOptions.length === 0 && (
+            <p className="text-xs text-ink-400 text-center py-3">
+              {searchable && search.trim() ? 'Tidak ada hasil untuk pencarian ini' : 'Tidak ada opsi'}
+            </p>
           )}
         </div>
       )}

@@ -52,17 +52,17 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    to: '/proyeksi-s2', label: 'Proyeksi Semester', shortLabel: 'Proyeksi', icon: TrendingUp,
-    sections: [
-      { id: 'sec-tren-proyeksi', label: 'Grafik Tren Penjualan' },
-      { id: 'sec-rincian-proyeksi', label: 'Rincian Bulanan Proyeksi' },
-    ],
-  },
-  {
     to: '/performa-outlet', label: 'Performa Outlet', shortLabel: 'Outlet', icon: Store,
     sections: [
       { id: 'sec-performa-outlet-trend', label: 'Grafik Performa Outlet' },
       { id: 'sec-performa-outlet-supplier', label: 'Performa Supplier' },
+    ],
+  },
+  {
+    to: '/proyeksi-s2', label: 'Proyeksi Semester', shortLabel: 'Proyeksi', icon: TrendingUp,
+    sections: [
+      { id: 'sec-tren-proyeksi', label: 'Grafik Tren Penjualan' },
+      { id: 'sec-rincian-proyeksi', label: 'Rincian Bulanan Proyeksi' },
     ],
   },
   { to: '/review-dsr', label: 'Review & Solusi DSR', shortLabel: 'Review', icon: ClipboardList },

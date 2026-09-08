@@ -35,21 +35,36 @@ export function filterByKodeToko(rows: SalesRow[], kodeToko: string[]): SalesRow
 }
 
 export interface KodeTokoOption {
-  value: string; // kodePelanggan
-  label: string; // "KODE - Nama Pelanggan"
+  value: string; // kodePelanggan — sama untuk kedua daftar di bawah (Kode Toko & Nama Pelanggan
+  label: string; // cuma menyaring/menampilkan toko yang sama dari dua sudut pencarian berbeda)
 }
 
-// Daftar pilihan Kode Toko yang tersedia pada baris yang diberikan (biasanya
-// sudah disaring Depo/Supplier/Tahun), diurutkan berdasarkan kode toko.
-export function distinctKodeTokoOptions(rows: SalesRow[]): KodeTokoOption[] {
+function distinctTokoMap(rows: SalesRow[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const r of rows) {
     if (!r.kodePelanggan) continue;
     if (!map.has(r.kodePelanggan)) map.set(r.kodePelanggan, r.namaPelanggan || '');
   }
-  return Array.from(map.entries())
+  return map;
+}
+
+// Daftar pilihan "Kode Toko" (diurutkan berdasarkan kode) yang tersedia pada
+// baris yang diberikan (biasanya sudah disaring Depo/Sales/Supplier/Tahun).
+export function distinctKodeTokoOptions(rows: SalesRow[]): KodeTokoOption[] {
+  return Array.from(distinctTokoMap(rows).entries())
     .map(([value, nama]) => ({ value, label: nama ? `${value} - ${nama}` : value }))
     .sort((a, b) => a.value.localeCompare(b.value));
+}
+
+// Daftar pilihan "Nama Pelanggan" — value-nya SAMA PERSIS dengan Kode Toko
+// (satu toko = satu kodePelanggan), hanya label & urutannya diprioritaskan
+// untuk pencarian berdasarkan nama supaya lebih mudah menemukan toko kalau
+// yang diingat cuma namanya, bukan kodenya. Memilih dari daftar ini atau
+// dari daftar Kode Toko sama-sama mengisi filter "Kode Toko" yang sama.
+export function distinctNamaPelangganOptions(rows: SalesRow[]): KodeTokoOption[] {
+  return Array.from(distinctTokoMap(rows).entries())
+    .map(([value, nama]) => ({ value, label: nama ? `${nama} (${value})` : value }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 // -----------------------------------------------------------------------
@@ -118,6 +133,14 @@ export interface SupplierItemRow {
   namaBarang: string;
   qty: number;
   nominal: number;
+}
+
+// Filter Bulan lokal di dalam popup "Daftar Barang" (terpisah dari filter
+// Quartal di halaman utama) — supaya orang bisa mempersempit daftar barang
+// ke bulan tertentu tanpa mengubah grafik Performa Outlet di belakangnya.
+export function filterByBulanPopup(rows: SalesRow[], bulan: number[]): SalesRow[] {
+  if (!bulan.length) return rows;
+  return rows.filter((r) => bulan.includes(r.monthNum));
 }
 
 export function itemsForSupplier(rows: SalesRow[], supplier: string): SupplierItemRow[] {
