@@ -16,7 +16,7 @@ interface PctLabelConfig {
 }
 
 export default function BarChartCard({
-  data, xKey, series, height = 300, horizontal = false, valueFormatter, angledLabels = false, minWidth, pctLabel, onItemClick,
+  data, xKey, series, height = 300, horizontal = false, valueFormatter, angledLabels = false, minWidth, pctLabel, onItemClick, yAxisWidth,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
@@ -32,6 +32,8 @@ export default function BarChartCard({
   pctLabel?: PctLabelConfig;
   /** When set, bars become clickable — call with the category (xKey value) that was clicked, e.g. to open a drill-down detail modal. */
   onItemClick?: (label: string) => void;
+  /** Width (px) reserved for the category axis labels when horizontal=true. Default 110 — raise this for longer labels (e.g. "KODE - Nama Toko") so wrapped lines don't overlap the row above/below. */
+  yAxisWidth?: number;
 }) {
   // Tooltip always shows the full nominal; axis/bar labels use a compact
   // "688.9 Juta" / "1.2 M" form so long currency figures stay readable.
@@ -51,7 +53,7 @@ export default function BarChartCard({
         {horizontal ? (
           <>
             <XAxis type="number" tickFormatter={(v) => fmtLabel(v)} tick={{ fontSize: 11 }} domain={[0, (max: number) => max * 1.12]} />
-            <YAxis type="category" dataKey={xKey} width={110} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey={xKey} width={yAxisWidth ?? 110} tick={{ fontSize: 11 }} />
           </>
         ) : (
           <>

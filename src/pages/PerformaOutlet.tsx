@@ -329,9 +329,10 @@ export default function PerformaOutlet() {
             <BarChartCard
               data={tokoBarData.map((d) => ({ label: `${d.kodePelanggan} - ${d.namaPelanggan}`, Omset: d.nominal }))}
               xKey="label"
-              series={[{ key: 'Omset', color: '#7c3aed', name: 'Omset' }]}
+              series={[{ key: 'Omset', color: '#2563eb', name: 'Omset' }]}
               horizontal
-              height={Math.max(240, tokoBarData.length * 34)}
+              height={Math.max(240, tokoBarData.length * 48)}
+              yAxisWidth={190}
               onItemClick={handleTokoBarClick}
             />
           </div>
