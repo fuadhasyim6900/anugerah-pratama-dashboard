@@ -17,7 +17,7 @@ import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
   QUARTAL_OPTIONS, filterByQuartal, filterByKodeToko, filterByBulanPopup,
   distinctKodeTokoOptions,
-  outletPerformanceTrend, YEAR_LINE_COLORS, supplierPerformanceBars, itemsForSupplier,
+  outletPerformanceTrend, YEAR_LINE_COLORS, supplierPerformanceBars, itemsForSupplier, tokoForSupplier,
 } from '../lib/performaOutlet';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 
@@ -70,40 +70,27 @@ export default function PerformaOutlet() {
   const barRef = useRef<HTMLDivElement>(null);
 
   // --- Popup "Daftar Barang" saat bar Supplier diklik ---------------------
-  // Filter Bulan & Toko di sini khusus mempersempit daftar barang di dalam
-  // popup (tidak memengaruhi grafik Performa Outlet/Performa Supplier di
-  // belakangnya), plus tombol Unduh untuk menyimpan daftarnya.
+  // Filter Bulan di sini khusus mempersempit isi popup (tidak memengaruhi
+  // grafik Performa Outlet/Performa Supplier di belakangnya), plus toggle
+  // untuk pilih mau lihat "Daftar Barang" atau "Daftar Toko" dari supplier
+  // yang sama, plus tombol Unduh untuk menyimpan daftarnya.
   const [supplierDetail, setSupplierDetail] = useState<string | null>(null);
   const [popupBulan, setPopupBulan] = useState<number[]>([]);
-  const [popupToko, setPopupToko] = useState<string[]>([]);
+  const [popupView, setPopupView] = useState<'barang' | 'toko'>('barang');
   useEffect(() => {
     if (!supplierDetail) {
       setPopupBulan([]);
-      setPopupToko([]);
+      setPopupView('barang');
     }
   }, [supplierDetail]);
 
-  // Daftar pilihan Toko khusus untuk popup: hanya toko yang memang beli dari
-  // supplier yang sedang dibuka & sudah kena filter Bulan popup, supaya
-  // opsinya relevan (bukan semua toko di halaman ini).
-  const popupRowsBySupplier = useMemo(
-    () => (supplierDetail ? filtered.filter((r) => (r.supp || '(Kosong)') === supplierDetail) : []),
-    [filtered, supplierDetail]
-  );
-  const popupTokoOptions = useMemo(
-    () => distinctKodeTokoOptions(filterByBulanPopup(popupRowsBySupplier, popupBulan)),
-    [popupRowsBySupplier, popupBulan]
-  );
-  useEffect(() => {
-    setPopupToko((prev) => prev.filter((k) => popupTokoOptions.some((o) => o.value === k)));
-  }, [popupTokoOptions]);
-
-  const popupRows = useMemo(
-    () => filterByKodeToko(filterByBulanPopup(filtered, popupBulan), popupToko),
-    [filtered, popupBulan, popupToko]
-  );
+  const popupRows = useMemo(() => filterByBulanPopup(filtered, popupBulan), [filtered, popupBulan]);
   const itemDetailData = useMemo(
     () => (supplierDetail ? itemsForSupplier(popupRows, supplierDetail) : []),
+    [supplierDetail, popupRows]
+  );
+  const tokoDetailData = useMemo(
+    () => (supplierDetail ? tokoForSupplier(popupRows, supplierDetail) : []),
     [supplierDetail, popupRows]
   );
   const itemListRef = useRef<HTMLDivElement>(null);
@@ -250,49 +237,81 @@ export default function PerformaOutlet() {
       <DetailModal
         open={!!supplierDetail}
         onClose={() => setSupplierDetail(null)}
-        title={`Daftar Barang: ${supplierDetail ?? ''}`}
+        title={`${popupView === 'barang' ? 'Daftar Barang' : 'Daftar Toko'}: ${supplierDetail ?? ''}`}
         subtitle={`${depoLabel(filters.depo)} · ${tahunLabel(filters.tahun)}${quartal.length ? ` · Q${quartal.join(', Q')}` : ''}`}
       >
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-ink-100/70 dark:bg-ink-800/60 w-fit mb-3">
+          <button
+            type="button"
+            onClick={() => setPopupView('barang')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${
+              popupView === 'barang'
+                ? 'bg-white dark:bg-ink-900 text-brand-600 shadow-card'
+                : 'text-ink-500 dark:text-ink-400 hover:text-ink-700 dark:hover:text-ink-200'
+            }`}
+          >
+            Daftar Barang
+          </button>
+          <button
+            type="button"
+            onClick={() => setPopupView('toko')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${
+              popupView === 'toko'
+                ? 'bg-white dark:bg-ink-900 text-brand-600 shadow-card'
+                : 'text-ink-500 dark:text-ink-400 hover:text-ink-700 dark:hover:text-ink-200'
+            }`}
+          >
+            Daftar Toko
+          </button>
+        </div>
         <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="w-full sm:w-56">
-              <MultiSelect
-                label="Bulan"
-                options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-                selected={popupBulan.map(String)}
-                onChange={(v) => setPopupBulan(v.map(Number))}
-                allLabel="Semua Bulan"
-              />
-            </div>
-            <div className="w-full sm:w-64">
-              <MultiSelect
-                label="Toko"
-                options={popupTokoOptions}
-                selected={popupToko}
-                onChange={setPopupToko}
-                allLabel="Semua Toko"
-                searchable
-                searchPlaceholder="Cari kode toko / nama / alamat..."
-              />
-            </div>
+          <div className="w-full sm:w-56">
+            <MultiSelect
+              label="Bulan"
+              options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+              selected={popupBulan.map(String)}
+              onChange={(v) => setPopupBulan(v.map(Number))}
+              allLabel="Semua Bulan"
+            />
           </div>
-          <ExportMenu targetRef={itemListRef} filename={`daftar-barang-${supplierDetail ?? 'supplier'}`} />
+          <ExportMenu
+            targetRef={itemListRef}
+            filename={`${popupView === 'barang' ? 'daftar-barang' : 'daftar-toko'}-${supplierDetail ?? 'supplier'}`}
+          />
         </div>
-        {popupToko.length > 0 && (
-          <p className="text-[11px] text-ink-400 -mt-2 mb-2">{popupToko.length} toko dipilih</p>
+        {popupView === 'barang' ? (
+          <div ref={itemListRef} className="space-y-1">
+            {itemDetailData.map((it) => (
+              <div key={it.namaBarang} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
+                <span className="font-medium truncate pr-2">{it.namaBarang}</span>
+                <span className="flex items-center gap-3 shrink-0">
+                  <span className="text-ink-400 text-xs">{formatNumber(it.qty)} qty</span>
+                  <span className="font-semibold">{formatRupiah(it.nominal)}</span>
+                </span>
+              </div>
+            ))}
+            {itemDetailData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data barang untuk supplier/bulan ini</p>}
+          </div>
+        ) : (
+          <div ref={itemListRef} className="space-y-1">
+            {tokoDetailData.map((tk) => (
+              <div key={tk.kodePelanggan} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
+                <span className="min-w-0 pr-2">
+                  <span className="font-medium truncate block">
+                    {tk.kodePelanggan}{tk.namaPelanggan ? ` - ${tk.namaPelanggan}` : ''}
+                  </span>
+                  {tk.alamatPelanggan && (
+                    <span className="text-ink-400 text-xs truncate block">{tk.alamatPelanggan}</span>
+                  )}
+                </span>
+                <span className="flex items-center gap-3 shrink-0">
+                  <span className="font-semibold">{formatRupiah(tk.nominal)}</span>
+                </span>
+              </div>
+            ))}
+            {tokoDetailData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data toko untuk supplier/bulan ini</p>}
+          </div>
         )}
-        <div ref={itemListRef} className="space-y-1">
-          {itemDetailData.map((it) => (
-            <div key={it.namaBarang} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
-              <span className="font-medium truncate pr-2">{it.namaBarang}</span>
-              <span className="flex items-center gap-3 shrink-0">
-                <span className="text-ink-400 text-xs">{formatNumber(it.qty)} qty</span>
-                <span className="font-semibold">{formatRupiah(it.nominal)}</span>
-              </span>
-            </div>
-          ))}
-          {itemDetailData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data barang untuk supplier/bulan ini</p>}
-        </div>
       </DetailModal>
     </div>
   );

@@ -153,3 +153,36 @@ export function itemsForSupplier(rows: SalesRow[], supplier: string): SupplierIt
   }
   return Array.from(map.values()).sort((a, b) => b.nominal - a.nominal);
 }
+
+// -----------------------------------------------------------------------
+// Popup "Daftar Toko" (mode alternatif dari popup yang sama): daftar toko
+// yang beli dari supplier tsb, dari baris yang sama persis dengan
+// itemsForSupplier di atas (cuma dikelompokkan per toko, bukan per barang).
+// -----------------------------------------------------------------------
+export interface SupplierTokoRow {
+  kodePelanggan: string;
+  namaPelanggan: string;
+  alamatPelanggan: string;
+  qty: number;
+  nominal: number;
+}
+
+export function tokoForSupplier(rows: SalesRow[], supplier: string): SupplierTokoRow[] {
+  const map = new Map<string, SupplierTokoRow>();
+  for (const r of rows) {
+    const supKey = r.supp || '(Kosong)';
+    if (supKey !== supplier) continue;
+    if (!r.kodePelanggan) continue;
+    const entry = map.get(r.kodePelanggan) || {
+      kodePelanggan: r.kodePelanggan,
+      namaPelanggan: r.namaPelanggan || '',
+      alamatPelanggan: r.alamatPelanggan || '',
+      qty: 0,
+      nominal: 0,
+    };
+    entry.qty += r.qty;
+    entry.nominal += r.nominal;
+    map.set(r.kodePelanggan, entry);
+  }
+  return Array.from(map.values()).sort((a, b) => b.nominal - a.nominal);
+}
