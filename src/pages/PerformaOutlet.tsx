@@ -70,16 +70,38 @@ export default function PerformaOutlet() {
   const barRef = useRef<HTMLDivElement>(null);
 
   // --- Popup "Daftar Barang" saat bar Supplier diklik ---------------------
-  // Filter Bulan di sini khusus mempersempit daftar barang di dalam popup
-  // (tidak memengaruhi grafik Performa Outlet/Performa Supplier di
+  // Filter Bulan & Toko di sini khusus mempersempit daftar barang di dalam
+  // popup (tidak memengaruhi grafik Performa Outlet/Performa Supplier di
   // belakangnya), plus tombol Unduh untuk menyimpan daftarnya.
   const [supplierDetail, setSupplierDetail] = useState<string | null>(null);
   const [popupBulan, setPopupBulan] = useState<number[]>([]);
+  const [popupToko, setPopupToko] = useState<string[]>([]);
   useEffect(() => {
-    if (!supplierDetail) setPopupBulan([]);
+    if (!supplierDetail) {
+      setPopupBulan([]);
+      setPopupToko([]);
+    }
   }, [supplierDetail]);
 
-  const popupRows = useMemo(() => filterByBulanPopup(filtered, popupBulan), [filtered, popupBulan]);
+  // Daftar pilihan Toko khusus untuk popup: hanya toko yang memang beli dari
+  // supplier yang sedang dibuka & sudah kena filter Bulan popup, supaya
+  // opsinya relevan (bukan semua toko di halaman ini).
+  const popupRowsBySupplier = useMemo(
+    () => (supplierDetail ? filtered.filter((r) => (r.supp || '(Kosong)') === supplierDetail) : []),
+    [filtered, supplierDetail]
+  );
+  const popupTokoOptions = useMemo(
+    () => distinctKodeTokoOptions(filterByBulanPopup(popupRowsBySupplier, popupBulan)),
+    [popupRowsBySupplier, popupBulan]
+  );
+  useEffect(() => {
+    setPopupToko((prev) => prev.filter((k) => popupTokoOptions.some((o) => o.value === k)));
+  }, [popupTokoOptions]);
+
+  const popupRows = useMemo(
+    () => filterByKodeToko(filterByBulanPopup(filtered, popupBulan), popupToko),
+    [filtered, popupBulan, popupToko]
+  );
   const itemDetailData = useMemo(
     () => (supplierDetail ? itemsForSupplier(popupRows, supplierDetail) : []),
     [supplierDetail, popupRows]
@@ -232,17 +254,33 @@ export default function PerformaOutlet() {
         subtitle={`${depoLabel(filters.depo)} · ${tahunLabel(filters.tahun)}${quartal.length ? ` · Q${quartal.join(', Q')}` : ''}`}
       >
         <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
-          <div className="w-full sm:w-56">
-            <MultiSelect
-              label="Bulan"
-              options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
-              selected={popupBulan.map(String)}
-              onChange={(v) => setPopupBulan(v.map(Number))}
-              allLabel="Semua Bulan"
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-full sm:w-56">
+              <MultiSelect
+                label="Bulan"
+                options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+                selected={popupBulan.map(String)}
+                onChange={(v) => setPopupBulan(v.map(Number))}
+                allLabel="Semua Bulan"
+              />
+            </div>
+            <div className="w-full sm:w-64">
+              <MultiSelect
+                label="Toko"
+                options={popupTokoOptions}
+                selected={popupToko}
+                onChange={setPopupToko}
+                allLabel="Semua Toko"
+                searchable
+                searchPlaceholder="Cari kode toko / nama / alamat..."
+              />
+            </div>
           </div>
           <ExportMenu targetRef={itemListRef} filename={`daftar-barang-${supplierDetail ?? 'supplier'}`} />
         </div>
+        {popupToko.length > 0 && (
+          <p className="text-[11px] text-ink-400 -mt-2 mb-2">{popupToko.length} toko dipilih</p>
+        )}
         <div ref={itemListRef} className="space-y-1">
           {itemDetailData.map((it) => (
             <div key={it.namaBarang} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
