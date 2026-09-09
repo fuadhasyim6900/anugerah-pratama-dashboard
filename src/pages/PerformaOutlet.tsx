@@ -19,6 +19,7 @@ import {
   QUARTAL_OPTIONS, filterByQuartal, filterByKodeToko, filterByBulanPopup,
   distinctKodeTokoOptions,
   outletPerformanceTrend, YEAR_LINE_COLORS, supplierPerformanceBars, itemsForSupplier, tokoForSupplier,
+  topTokoBars, suppliersForToko, type TokoPerformanceRow,
 } from '../lib/performaOutlet';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 
@@ -66,9 +67,11 @@ export default function PerformaOutlet() {
 
   const trend = useMemo(() => outletPerformanceTrend(filtered), [filtered]);
   const barData = useMemo(() => supplierPerformanceBars(filtered), [filtered]);
+  const tokoBarData = useMemo(() => topTokoBars(filtered, 15), [filtered]);
 
   const trendRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const tokoBarRef = useRef<HTMLDivElement>(null);
 
   // --- Popup "Daftar Barang" saat bar Supplier diklik ---------------------
   // Filter Bulan di sini khusus mempersempit isi popup (tidak memengaruhi
@@ -130,6 +133,47 @@ export default function PerformaOutlet() {
       }
     } finally {
       setPopupExportBusy(false);
+    }
+  }
+
+  // --- Popup "Daftar Supplier" saat bar Toko (Top 15 Toko) diklik --------
+  // Terpisah dari popup Supplier di atas (bisa dibuka salah satu saja).
+  // Menyimpan seluruh baris toko yang diklik (bukan cuma kode) supaya judul
+  // popup bisa langsung tampilkan nama & alamatnya tanpa perlu cari lagi.
+  const [tokoDetail, setTokoDetail] = useState<TokoPerformanceRow | null>(null);
+  const [tokoPopupBulan, setTokoPopupBulan] = useState<number[]>([]);
+  useEffect(() => {
+    if (!tokoDetail) setTokoPopupBulan([]);
+  }, [tokoDetail]);
+
+  function handleTokoBarClick(label: string) {
+    const match = tokoBarData.find((d) => `${d.kodePelanggan} - ${d.namaPelanggan}` === label);
+    if (match) setTokoDetail(match);
+  }
+
+  const tokoPopupRows = useMemo(() => filterByBulanPopup(filtered, tokoPopupBulan), [filtered, tokoPopupBulan]);
+  const tokoSupplierData = useMemo(
+    () => (tokoDetail ? suppliersForToko(tokoPopupRows, tokoDetail.kodePelanggan) : []),
+    [tokoDetail, tokoPopupRows]
+  );
+  const tokoListRef = useRef<HTMLDivElement>(null);
+
+  const [tokoExportBusy, setTokoExportBusy] = useState(false);
+  async function downloadTokoSupplierExcel() {
+    if (tokoExportBusy || !tokoDetail) return;
+    setTokoExportBusy(true);
+    try {
+      await exportRowsToXlsx(
+        tokoSupplierData,
+        [
+          { header: 'Supplier', value: (r) => r.supplier, width: 35 },
+          { header: 'Nominal', value: (r) => r.nominal, width: 18, numFmt: '#,##0' },
+        ],
+        `daftar-supplier-${tokoDetail.kodePelanggan}`,
+        'Daftar Supplier'
+      );
+    } finally {
+      setTokoExportBusy(false);
     }
   }
 
@@ -270,6 +314,31 @@ export default function PerformaOutlet() {
             <p className="text-xs text-ink-400 mt-2 text-center">Tidak ada data untuk kombinasi filter ini.</p>
           )}
         </div>
+
+        <div id="sec-performa-outlet-toko" className="card p-5 scroll-mt-28" ref={tokoBarRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
+            <div>
+              <h3 className="font-bold text-sm">Top 15 Toko</h3>
+              <p className="text-xs text-ink-400">
+                15 toko dengan Omset tertinggi, mengikuti filter Performa Outlet di atas. Klik salah satu bar untuk melihat daftar supplier yang dibeli toko tsb.
+              </p>
+            </div>
+            <ExportMenu targetRef={tokoBarRef} filename="top-15-toko" />
+          </div>
+          <div className="mt-3">
+            <BarChartCard
+              data={tokoBarData.map((d) => ({ label: `${d.kodePelanggan} - ${d.namaPelanggan}`, Omset: d.nominal }))}
+              xKey="label"
+              series={[{ key: 'Omset', color: '#7c3aed', name: 'Omset' }]}
+              horizontal
+              height={Math.max(240, tokoBarData.length * 34)}
+              onItemClick={handleTokoBarClick}
+            />
+          </div>
+          {tokoBarData.length === 0 && (
+            <p className="text-xs text-ink-400 mt-2 text-center">Tidak ada data untuk kombinasi filter ini.</p>
+          )}
+        </div>
       </div>
 
       <DetailModal
@@ -356,6 +425,48 @@ export default function PerformaOutlet() {
             {tokoDetailData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data toko untuk supplier/bulan ini</p>}
           </div>
         )}
+      </DetailModal>
+
+      <DetailModal
+        open={!!tokoDetail}
+        onClose={() => setTokoDetail(null)}
+        title={`Daftar Supplier: ${tokoDetail ? `${tokoDetail.kodePelanggan} - ${tokoDetail.namaPelanggan}` : ''}`}
+        subtitle={
+          tokoDetail?.alamatPelanggan
+            ? tokoDetail.alamatPelanggan
+            : `${depoLabel(filters.depo)} · ${tahunLabel(filters.tahun)}${quartal.length ? ` · Q${quartal.join(', Q')}` : ''}`
+        }
+      >
+        <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
+          <div className="w-full sm:w-56">
+            <MultiSelect
+              label="Bulan"
+              options={MONTH_NAMES_FULL_ID.map((m, i) => ({ value: String(i + 1), label: m }))}
+              selected={tokoPopupBulan.map(String)}
+              onChange={(v) => setTokoPopupBulan(v.map(Number))}
+              allLabel="Semua Bulan"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={downloadTokoSupplierExcel}
+            disabled={tokoExportBusy}
+            title="Unduh sebagai Excel (.xlsx)"
+            className="flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2.5 py-1.5 hover:bg-ink-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-60 shrink-0"
+          >
+            {tokoExportBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+            <span>Unduh Excel</span>
+          </button>
+        </div>
+        <div ref={tokoListRef} className="space-y-1">
+          {tokoSupplierData.map((s) => (
+            <div key={s.supplier} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-50 dark:border-ink-800/60">
+              <span className="font-medium truncate pr-2">{s.supplier}</span>
+              <span className="font-semibold shrink-0">{formatRupiah(s.nominal)}</span>
+            </div>
+          ))}
+          {tokoSupplierData.length === 0 && <p className="text-xs text-ink-400">Tidak ada data supplier untuk toko/bulan ini</p>}
+        </div>
       </DetailModal>
     </div>
   );

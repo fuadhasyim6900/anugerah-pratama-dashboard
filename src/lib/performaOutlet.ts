@@ -186,3 +186,57 @@ export function tokoForSupplier(rows: SalesRow[], supplier: string): SupplierTok
   }
   return Array.from(map.values()).sort((a, b) => b.nominal - a.nominal);
 }
+
+// -----------------------------------------------------------------------
+// Barchart horizontal "Top 15 Toko": akumulasi Nominal per Toko (kode
+// pelanggan), dari baris yang SAMA dengan grafik Performa Outlet/Performa
+// Supplier di atasnya (ikut Depo/Supplier/Nama Sales/Kode Toko/Tahun/
+// Quartal), diambil 15 toko dengan nominal tertinggi.
+// -----------------------------------------------------------------------
+export interface TokoPerformanceRow {
+  kodePelanggan: string;
+  namaPelanggan: string;
+  alamatPelanggan: string;
+  nominal: number;
+}
+
+export function topTokoBars(rows: SalesRow[], limit = 15): TokoPerformanceRow[] {
+  const map = new Map<string, TokoPerformanceRow>();
+  for (const r of rows) {
+    if (!r.kodePelanggan) continue;
+    const entry = map.get(r.kodePelanggan) || {
+      kodePelanggan: r.kodePelanggan,
+      namaPelanggan: r.namaPelanggan || '',
+      alamatPelanggan: r.alamatPelanggan || '',
+      nominal: 0,
+    };
+    entry.nominal += r.nominal;
+    map.set(r.kodePelanggan, entry);
+  }
+  return Array.from(map.values())
+    .sort((a, b) => b.nominal - a.nominal)
+    .slice(0, limit);
+}
+
+// -----------------------------------------------------------------------
+// Popup "Daftar Supplier" saat bar Toko diklik: akumulasi Nominal per
+// Supplier UNTUK satu toko tsb saja, dari baris yang sama (sudah kena semua
+// filter halaman ini + filter Bulan lokal popup), diurutkan dari nominal
+// tertinggi.
+// -----------------------------------------------------------------------
+export interface TokoSupplierRow {
+  supplier: string;
+  nominal: number;
+}
+
+export function suppliersForToko(rows: SalesRow[], kodePelanggan: string): TokoSupplierRow[] {
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (r.kodePelanggan !== kodePelanggan) continue;
+    const key = r.supp || '(Kosong)';
+    map.set(key, (map.get(key) || 0) + r.nominal);
+  }
+  return Array.from(map.entries())
+    .map(([supplier, nominal]) => ({ supplier, nominal }))
+    .sort((a, b) => b.nominal - a.nominal);
+}
