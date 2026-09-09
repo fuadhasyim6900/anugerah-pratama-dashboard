@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Wallet } from 'lucide-react';
+import { Store, Wallet, FileSpreadsheet, Loader2 } from 'lucide-react';
 import TopBar from '../components/TopBar';
 import KpiCard from '../components/KpiCard';
 import LineChartCard from '../components/charts/LineChartCard';
@@ -13,6 +13,7 @@ import {
   applyFilters, sumNominal, distinctCount, formatRupiah, formatNumber,
   depoLabel, tahunLabel, DEPO_LIST_EXCLUDING_ADMIN, SUPP_LIST, activeDsrList,
 } from '../lib/aggregate';
+import { exportRowsToXlsx } from '../lib/exportXlsx';
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
   QUARTAL_OPTIONS, filterByQuartal, filterByKodeToko, filterByBulanPopup,
@@ -94,6 +95,43 @@ export default function PerformaOutlet() {
     [supplierDetail, popupRows]
   );
   const itemListRef = useRef<HTMLDivElement>(null);
+
+  // Unduh isi popup sebagai Excel (.xlsx) yang rapi — data asli, bukan hasil
+  // screenshot gambar/PDF (ExportMenu) yang jadi kepanjangan kalau barisnya
+  // banyak. Kolom & nama file menyesuaikan tab yang aktif (Barang/Toko).
+  const [popupExportBusy, setPopupExportBusy] = useState(false);
+  async function downloadPopupExcel() {
+    if (popupExportBusy || !supplierDetail) return;
+    setPopupExportBusy(true);
+    try {
+      if (popupView === 'barang') {
+        await exportRowsToXlsx(
+          itemDetailData,
+          [
+            { header: 'Nama Barang', value: (r) => r.namaBarang, width: 40 },
+            { header: 'Qty', value: (r) => r.qty, width: 12, numFmt: '#,##0' },
+            { header: 'Nominal', value: (r) => r.nominal, width: 18, numFmt: '#,##0' },
+          ],
+          `daftar-barang-${supplierDetail}`,
+          'Daftar Barang'
+        );
+      } else {
+        await exportRowsToXlsx(
+          tokoDetailData,
+          [
+            { header: 'Kode Toko', value: (r) => r.kodePelanggan, width: 14 },
+            { header: 'Nama Toko', value: (r) => r.namaPelanggan, width: 30 },
+            { header: 'Alamat', value: (r) => r.alamatPelanggan, width: 45 },
+            { header: 'Nominal', value: (r) => r.nominal, width: 18, numFmt: '#,##0' },
+          ],
+          `daftar-toko-${supplierDetail}`,
+          'Daftar Toko'
+        );
+      }
+    } finally {
+      setPopupExportBusy(false);
+    }
+  }
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -274,10 +312,16 @@ export default function PerformaOutlet() {
               allLabel="Semua Bulan"
             />
           </div>
-          <ExportMenu
-            targetRef={itemListRef}
-            filename={`${popupView === 'barang' ? 'daftar-barang' : 'daftar-toko'}-${supplierDetail ?? 'supplier'}`}
-          />
+          <button
+            type="button"
+            onClick={downloadPopupExcel}
+            disabled={popupExportBusy}
+            title="Unduh sebagai Excel (.xlsx)"
+            className="flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-2.5 py-1.5 hover:bg-ink-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-60 shrink-0"
+          >
+            {popupExportBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+            <span>Unduh Excel</span>
+          </button>
         </div>
         {popupView === 'barang' ? (
           <div ref={itemListRef} className="space-y-1">
