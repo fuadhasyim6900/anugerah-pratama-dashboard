@@ -35,36 +35,33 @@ export function filterByKodeToko(rows: SalesRow[], kodeToko: string[]): SalesRow
 }
 
 export interface KodeTokoOption {
-  value: string; // kodePelanggan — sama untuk kedua daftar di bawah (Kode Toko & Nama Pelanggan
-  label: string; // cuma menyaring/menampilkan toko yang sama dari dua sudut pencarian berbeda)
+  value: string; // kodePelanggan
+  label: string;
 }
 
-function distinctTokoMap(rows: SalesRow[]): Map<string, string> {
-  const map = new Map<string, string>();
+function distinctTokoMap(rows: SalesRow[]): Map<string, { nama: string; alamat: string }> {
+  const map = new Map<string, { nama: string; alamat: string }>();
   for (const r of rows) {
     if (!r.kodePelanggan) continue;
-    if (!map.has(r.kodePelanggan)) map.set(r.kodePelanggan, r.namaPelanggan || '');
+    if (!map.has(r.kodePelanggan)) {
+      map.set(r.kodePelanggan, { nama: r.namaPelanggan || '', alamat: r.alamatPelanggan || '' });
+    }
   }
   return map;
 }
 
 // Daftar pilihan "Kode Toko" (diurutkan berdasarkan kode) yang tersedia pada
 // baris yang diberikan (biasanya sudah disaring Depo/Sales/Supplier/Tahun).
+// Label menyertakan alamat supaya toko dengan nama sama (mis. dua "TB Mulia"
+// dengan kode berbeda) tetap bisa dibedakan tanpa harus menebak.
 export function distinctKodeTokoOptions(rows: SalesRow[]): KodeTokoOption[] {
   return Array.from(distinctTokoMap(rows).entries())
-    .map(([value, nama]) => ({ value, label: nama ? `${value} - ${nama}` : value }))
+    .map(([value, { nama, alamat }]) => {
+      const namaPart = nama ? ` - ${nama}` : '';
+      const alamatPart = alamat ? ` (${alamat})` : '';
+      return { value, label: `${value}${namaPart}${alamatPart}` };
+    })
     .sort((a, b) => a.value.localeCompare(b.value));
-}
-
-// Daftar pilihan "Nama Pelanggan" — value-nya SAMA PERSIS dengan Kode Toko
-// (satu toko = satu kodePelanggan), hanya label & urutannya diprioritaskan
-// untuk pencarian berdasarkan nama supaya lebih mudah menemukan toko kalau
-// yang diingat cuma namanya, bukan kodenya. Memilih dari daftar ini atau
-// dari daftar Kode Toko sama-sama mengisi filter "Kode Toko" yang sama.
-export function distinctNamaPelangganOptions(rows: SalesRow[]): KodeTokoOption[] {
-  return Array.from(distinctTokoMap(rows).entries())
-    .map(([value, nama]) => ({ value, label: nama ? `${nama} (${value})` : value }))
-    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 // -----------------------------------------------------------------------

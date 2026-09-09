@@ -16,7 +16,7 @@ import {
 import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
   QUARTAL_OPTIONS, filterByQuartal, filterByKodeToko, filterByBulanPopup,
-  distinctKodeTokoOptions, distinctNamaPelangganOptions,
+  distinctKodeTokoOptions,
   outletPerformanceTrend, YEAR_LINE_COLORS, supplierPerformanceBars, itemsForSupplier,
 } from '../lib/performaOutlet';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
@@ -26,22 +26,18 @@ export default function PerformaOutlet() {
   const filters = useFilterStore();
 
   // Urutan filter halaman ini: Depo -> Supplier -> Nama Sales -> Kode Toko ->
-  // Nama Pelanggan -> Tahun -> Quartal. Depo/Supplier/Nama Sales/Tahun
-  // memakai filter global di sidebar (sama seperti halaman lain, jadi tetap
-  // sinkron dengan tombol Filter di atas); Kode Toko/Nama Pelanggan/Quartal
-  // adalah filter lokal khusus halaman ini (bulan global sengaja diabaikan
-  // karena sumbu X grafik ini selalu Jan-Des penuh).
+  // Tahun -> Quartal. Depo/Supplier/Nama Sales/Tahun memakai filter global di
+  // sidebar (sama seperti halaman lain, jadi tetap sinkron dengan tombol
+  // Filter di atas); Kode Toko/Quartal adalah filter lokal khusus halaman ini
+  // (bulan global sengaja diabaikan karena sumbu X grafik ini selalu Jan-Des
+  // penuh).
   const scopedByGlobal = useMemo(
     () => applyFilters(sales, { ...filters, bulan: [] }),
     [sales, filters]
   );
 
-  // Kode Toko & Nama Pelanggan sama-sama mengisi satu state ini (satu toko =
-  // satu kodePelanggan) — cuma tampilan/urutan pencariannya beda, jadi
-  // orang bisa cari lewat kode ATAU lewat nama, mana yang lebih diingat.
   const [kodeToko, setKodeToko] = useState<string[]>([]);
   const kodeTokoOptions = useMemo(() => distinctKodeTokoOptions(scopedByGlobal), [scopedByGlobal]);
-  const namaPelangganOptions = useMemo(() => distinctNamaPelangganOptions(scopedByGlobal), [scopedByGlobal]);
   useEffect(() => {
     setKodeToko((prev) => prev.filter((k) => kodeTokoOptions.some((o) => o.value === k)));
   }, [kodeTokoOptions]);
@@ -120,7 +116,7 @@ export default function PerformaOutlet() {
                 Total Omset: {formatRupiah(totalOmset)}
               </p>
             </div>
-            {/* Urutan filter: Depo, Supplier, Nama Sales, Kode Toko, Nama Pelanggan, Tahun, Quartal */}
+            {/* Urutan filter: Depo, Supplier, Nama Sales, Kode Toko, Tahun, Quartal */}
             <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto">
               <div className="w-full sm:w-40">
                 <MultiSelect
@@ -151,7 +147,7 @@ export default function PerformaOutlet() {
                   searchPlaceholder="Cari nama sales..."
                 />
               </div>
-              <div className="w-full sm:w-52">
+              <div className="w-full sm:w-72">
                 <MultiSelect
                   label="Kode Toko"
                   options={kodeTokoOptions}
@@ -159,18 +155,7 @@ export default function PerformaOutlet() {
                   onChange={setKodeToko}
                   allLabel="Semua Kode Toko"
                   searchable
-                  searchPlaceholder="Cari kode toko..."
-                />
-              </div>
-              <div className="w-full sm:w-56">
-                <MultiSelect
-                  label="Nama Pelanggan"
-                  options={namaPelangganOptions}
-                  selected={kodeToko}
-                  onChange={setKodeToko}
-                  allLabel="Semua Pelanggan"
-                  searchable
-                  searchPlaceholder="Cari nama pelanggan..."
+                  searchPlaceholder="Cari kode toko / nama / alamat..."
                 />
               </div>
               <div className="w-full sm:w-28">
@@ -210,7 +195,7 @@ export default function PerformaOutlet() {
             <p className="text-xs text-ink-400 mt-2 text-center">Tidak ada data untuk kombinasi filter ini.</p>
           )}
           <p className="text-[11px] text-ink-400 mt-2">
-            Filter Depo/Supplier/Nama Sales/Kode Toko/Nama Pelanggan/Tahun/Quartal di atas berlaku untuk grafik ini dan grafik Performa Supplier di bawah. Kode Toko &amp; Nama Pelanggan menyaring toko yang sama — pilih dari salah satu, mana yang lebih mudah diingat.
+            Filter Depo/Supplier/Nama Sales/Kode Toko/Tahun/Quartal di atas berlaku untuk grafik ini dan grafik Performa Supplier di bawah. Kode Toko bisa dicari lewat kode, nama, atau alamat toko — alamat ditampilkan di daftar pilihan untuk membedakan toko dengan nama yang sama.
           </p>
         </div>
 
