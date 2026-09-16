@@ -72,12 +72,14 @@ export function distinctKodeTokoOptions(rows: SalesRow[]): KodeTokoOption[] {
 // supaya sumbu X selalu lengkap Jan-Des.
 // -----------------------------------------------------------------------
 export interface OutletPerformanceTrend {
-  data: Record<string, string | number>[]; // [{ bulan: 'Jan', '2025': 12000000, '2026': 15000000, Average: 13500000 }, ...]
+  data: Record<string, string | number>[]; // [{ bulan: 'Jan', '2025': 12000000, '2026': 15000000, Average: 9800000 }, ...]
   years: number[];
-  // Rata-rata Omset per Tahun (Total Omset seluruh tahun dibagi jumlah
-  // tahun yang muncul pada data) — angka yang sama dengan yang direpresentasikan
-  // garis "Average" di grafik kalau dijumlah 12 bulannya.
-  averageOmsetPerTahun: number;
+  // Rata-rata Omset per bulan AKTIF (dihitung dari total Omset dibagi jumlah
+  // kombinasi bulan-tahun yang punya transaksi, jadi bulan yang kosong/kena
+  // filter Quartal tidak ikut menurunkan rata-ratanya). Angka yang sama ini
+  // dipakai sebagai nilai garis "Average" di grafik — makanya garisnya lurus
+  // datar, sama tinggi di semua bulan.
+  averageOmsetPerBulan: number;
 }
 
 export function outletPerformanceTrend(rows: SalesRow[]): OutletPerformanceTrend {
@@ -90,25 +92,25 @@ export function outletPerformanceTrend(rows: SalesRow[]): OutletPerformanceTrend
     monthMap.set(r.tahun, (monthMap.get(r.tahun) || 0) + r.nominal);
   }
   let totalOmset = 0;
-  const data = Array.from({ length: 12 }, (_, i) => {
+  let activeCells = 0; // jumlah kombinasi (bulan, tahun) yang punya Omset > 0
+  const rawRows = Array.from({ length: 12 }, (_, i) => {
     const monthNum = i + 1;
     const row: Record<string, string | number> = { bulan: MONTH_NAMES_ID[i] };
     const monthMap = map.get(monthNum)!;
-    let monthSum = 0;
     for (const y of years) {
       const v = monthMap.get(y) || 0;
       row[String(y)] = v;
-      monthSum += v;
+      totalOmset += v;
+      if (v > 0) activeCells += 1;
     }
-    totalOmset += monthSum;
-    // Garis "Average": rata-rata Omset bulan ybs di antara tahun-tahun yang
-    // muncul pada data (kalau cuma 1 tahun yang aktif, otomatis sama dengan
-    // garis tahun itu sendiri).
-    row.Average = years.length ? Math.round(monthSum / years.length) : 0;
     return row;
   });
-  const averageOmsetPerTahun = years.length ? Math.round(totalOmset / years.length) : 0;
-  return { data, years, averageOmsetPerTahun };
+  const averageOmsetPerBulan = activeCells ? Math.round(totalOmset / activeCells) : 0;
+  // Garis "Average" dibuat FLAT: nilai rata-rata yang sama ditaruh di semua
+  // 12 titik bulan, supaya jadi garis lurus datar sebagai pembanding —
+  // bukan rata-rata per bulan (yang naik-turun ikut pola musiman).
+  const data = rawRows.map((row) => ({ ...row, Average: averageOmsetPerBulan }));
+  return { data, years, averageOmsetPerBulan };
 }
 
 // Palet warna line per tahun — cukup untuk beberapa tahun sekaligus, diulang

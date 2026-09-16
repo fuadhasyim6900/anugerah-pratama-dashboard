@@ -7,6 +7,10 @@ interface Series {
   color: string;
   name: string;
   dashed?: boolean;
+  // Sembunyikan label angka di tiap titik untuk garis ini (berguna untuk
+  // garis "Average" yang flat/datar, supaya angka yang sama tidak muncul
+  // berulang di semua titik).
+  hideLabel?: boolean;
 }
 
 export default function LineChartCard({
@@ -50,12 +54,14 @@ export default function LineChartCard({
             dot={{ r: 3 }}
             activeDot={{ r: 5 }}
           >
-            <LabelList
-              dataKey={s.key}
-              position="top"
-              formatter={(v: unknown) => fmtLabel(Number(v))}
-              style={{ fontSize: 10, fontWeight: 600, fill: valueLabelColor }}
-            />
+            {!s.hideLabel && (
+              <LabelList
+                dataKey={s.key}
+                position="top"
+                formatter={(v: unknown) => fmtLabel(Number(v))}
+                style={{ fontSize: 10, fontWeight: 600, fill: valueLabelColor }}
+              />
+            )}
           </Line>
         ))}
       </LineChart>

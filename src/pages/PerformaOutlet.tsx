@@ -208,7 +208,7 @@ export default function PerformaOutlet() {
               </p>
               <p className="text-xs font-bold whitespace-nowrap mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                 <span className="text-brand-600">Total Omset: {formatRupiah(totalOmset)}</span>
-                <span className="text-ink-400">Average Omset: {formatRupiah(trend.averageOmsetPerTahun)}</span>
+                <span className="text-ink-400">Average Omset per Bulan: {formatRupiah(trend.averageOmsetPerBulan)}</span>
               </p>
             </div>
             {/* Urutan filter: Depo, Supplier, Nama Sales, Kode Toko, Tahun, Quartal */}
@@ -285,7 +285,7 @@ export default function PerformaOutlet() {
                   name: String(y),
                 })),
                 ...(trend.years.length > 0
-                  ? [{ key: 'Average', color: AVERAGE_LINE_COLOR, name: 'Average', dashed: true }]
+                  ? [{ key: 'Average', color: AVERAGE_LINE_COLOR, name: 'Average', dashed: true, hideLabel: true }]
                   : []),
               ]}
               height={340}
