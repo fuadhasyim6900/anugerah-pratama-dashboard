@@ -18,8 +18,9 @@ import { MONTH_NAMES_FULL_ID } from '../lib/types';
 import {
   QUARTAL_OPTIONS, filterByQuartal, filterByKodeToko, filterByBulanPopup,
   distinctKodeTokoOptions,
-  outletPerformanceTrend, YEAR_LINE_COLORS, supplierPerformanceBars, itemsForSupplier, tokoForSupplier,
+  outletPerformanceTrend, YEAR_LINE_COLORS, AVERAGE_LINE_COLOR, supplierPerformanceBars, itemsForSupplier, tokoForSupplier,
   topTokoBars, suppliersForToko, type TokoPerformanceRow,
+  outletPerformanceTrendBySupplier, SUPPLIER_LINE_COLORS,
 } from '../lib/performaOutlet';
 import { LoadingState, ErrorState } from './ExecutiveDashboard';
 
@@ -68,10 +69,12 @@ export default function PerformaOutlet() {
   const trend = useMemo(() => outletPerformanceTrend(filtered), [filtered]);
   const barData = useMemo(() => supplierPerformanceBars(filtered), [filtered]);
   const tokoBarData = useMemo(() => topTokoBars(filtered, 15), [filtered]);
+  const supplierTrend = useMemo(() => outletPerformanceTrendBySupplier(filtered), [filtered]);
 
   const trendRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const tokoBarRef = useRef<HTMLDivElement>(null);
+  const supplierTrendRef = useRef<HTMLDivElement>(null);
 
   // --- Popup "Daftar Barang" saat bar Supplier diklik ---------------------
   // Filter Bulan di sini khusus mempersempit isi popup (tidak memengaruhi
@@ -203,8 +206,9 @@ export default function PerformaOutlet() {
                 {filters.dsr.length ? ` · Sales: ${filters.dsr.join(', ')}` : ''}
                 {kodeToko.length ? ` · ${kodeToko.length} Toko Dipilih` : ''}
               </p>
-              <p className="text-xs font-bold text-brand-600 whitespace-nowrap mt-1">
-                Total Omset: {formatRupiah(totalOmset)}
+              <p className="text-xs font-bold whitespace-nowrap mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <span className="text-brand-600">Total Omset: {formatRupiah(totalOmset)}</span>
+                <span className="text-ink-400">Average Omset: {formatRupiah(trend.averageOmsetPerTahun)}</span>
               </p>
             </div>
             {/* Urutan filter: Depo, Supplier, Nama Sales, Kode Toko, Tahun, Quartal */}
@@ -274,11 +278,16 @@ export default function PerformaOutlet() {
             <LineChartCard
               data={trend.data}
               xKey="bulan"
-              series={trend.years.map((y, i) => ({
-                key: String(y),
-                color: YEAR_LINE_COLORS[i % YEAR_LINE_COLORS.length],
-                name: String(y),
-              }))}
+              series={[
+                ...trend.years.map((y, i) => ({
+                  key: String(y),
+                  color: YEAR_LINE_COLORS[i % YEAR_LINE_COLORS.length],
+                  name: String(y),
+                })),
+                ...(trend.years.length > 0
+                  ? [{ key: 'Average', color: AVERAGE_LINE_COLOR, name: 'Average', dashed: true }]
+                  : []),
+              ]}
               height={340}
             />
           </div>
@@ -337,6 +346,33 @@ export default function PerformaOutlet() {
             />
           </div>
           {tokoBarData.length === 0 && (
+            <p className="text-xs text-ink-400 mt-2 text-center">Tidak ada data untuk kombinasi filter ini.</p>
+          )}
+        </div>
+
+        <div id="sec-performa-outlet-supplier-trend" className="card p-5 scroll-mt-28" ref={supplierTrendRef}>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
+            <div>
+              <h3 className="font-bold text-sm">Performa Outlet per Supplier</h3>
+              <p className="text-xs text-ink-400">
+                Omset per bulan (Jan - Des), satu garis per Supplier, mengikuti filter Performa Outlet di atas.
+              </p>
+            </div>
+            <ExportMenu targetRef={supplierTrendRef} filename="performa-outlet-per-supplier" />
+          </div>
+          <div className="mt-3">
+            <LineChartCard
+              data={supplierTrend.data}
+              xKey="bulan"
+              series={supplierTrend.suppliers.map((s, i) => ({
+                key: s,
+                color: SUPPLIER_LINE_COLORS[i % SUPPLIER_LINE_COLORS.length],
+                name: s,
+              }))}
+              height={340}
+            />
+          </div>
+          {supplierTrend.suppliers.length === 0 && (
             <p className="text-xs text-ink-400 mt-2 text-center">Tidak ada data untuk kombinasi filter ini.</p>
           )}
         </div>
